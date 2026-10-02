@@ -17,6 +17,7 @@ compose.yaml
 docs/architecture.md
 docs/compatibilite.md
 docs/images/grocyste-core-synthetic.png
+docs/images/grocyste-recipe-synthetic.png
 docs/installation.md
 docs/livraison-1.0.0.md
 docs/security-validation.md

@@ -54,6 +54,10 @@ Les neuf archives signées et leurs métadonnées sont publiées dans leurs rele
 
 Les trois dépôts historiques conservent leur branche par défaut. Les adaptations Grocyste sont identifiées par les tags [StatNerd v4.4.2](https://github.com/Raph563/StatNerd/tree/v4.4.2), [ProductHelper v4.0.43](https://github.com/Raph563/ProductHelper/tree/v4.0.43) et [ReceiptScanner v1.0.4](https://github.com/Raph563/ReceiptScanner/tree/v1.0.4) ; leurs guides actuels sont ceux de ces versions. Les anciens guides restent archivés comme documentation historique.
 
+La capture suivante montre une recette synthétique : le budget demeure explicitement incomplet lorsque ses références de prix sont absentes, et le suivi live présente les étapes et minuteurs.
+
+![Recette live et budget sur des données synthétiques](docs/images/grocyste-recipe-synthetic.png)
+
 ## Architecture
 
 ```mermaid
