@@ -25,10 +25,14 @@ def normalize(data):
     return canonical(result), len(timers)
 
 
-def migrate(home: Path, command):
+def migrate(home: Path, command, *, selected=False):
     directory = home / "receipts/live-migration"
     journal = directory / "receipt.json"
     target = home / "state/live/live-state.json"
+    if target.is_symlink():
+        raise ManagerError("invalid_live_state", "Destination live irrégulière", 409)
+    if not selected and not journal.exists():
+        return {"status": "not-selected"}
     with file_lock(home / "receipts/.live-migration.lock"):
         container = inspect_optional(command, "mon-grocy-live")
         if journal.exists():
@@ -60,6 +64,8 @@ def migrate(home: Path, command):
             normalized, archived = normalize(original)
             if target.exists():
                 current = load_json(target.read_bytes(), 8 * 1024 * 1024)
+                if not isinstance(current, dict):
+                    raise ManagerError("invalid_live_state", "Destination live invalide", 409)
                 if (current.get("sessions") or current.get("commands") or current.get("timerReceipts")
                         or current.get("timers")) and target.read_bytes() != normalized:
                     raise ManagerError("live_destination_drift", "État live de destination déjà utilisé", 409)
@@ -76,6 +82,8 @@ def migrate(home: Path, command):
         if confirmed is None or confirmed["Id"] != receipt["oldContainerId"] or confirmed["State"]["Running"]:
             raise ManagerError("old_live_active", "Le propriétaire live historique n'est pas arrêté", 503)
         source = Path(receipt["source"])
+        if source.is_symlink() or not source.is_file():
+            raise ManagerError("invalid_live_state", "Source live irrégulière lors de la reprise", 409)
         original = source.read_bytes()
         normalized, archived = normalize(original)
         # Capture the final snapshot after stopping the writer, retaining the preview too.
@@ -83,6 +91,8 @@ def migrate(home: Path, command):
         atomic_bytes(directory / "live-state.normalized.json", normalized)
         if target.exists():
             current = load_json(target.read_bytes(), 8 * 1024 * 1024)
+            if not isinstance(current, dict):
+                raise ManagerError("invalid_live_state", "Destination live invalide", 409)
             if (current.get("sessions") or current.get("commands") or current.get("timerReceipts") or current.get("timers")) and target.read_bytes() != normalized:
                 raise ManagerError("live_destination_drift", "État live de destination modifié", 409)
         target.parent.mkdir(parents=True, exist_ok=True)

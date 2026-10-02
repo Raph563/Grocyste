@@ -37,6 +37,18 @@ def _block(lines, start):
     raise ManagerError("invalid_proxy", "Bloc Caddy incomplet")
 
 
+def uses_legacy_live(content: bytes, origin: str):
+    domain = urlsplit(origin).netloc
+    lines = content.decode("utf-8").splitlines(keepends=True)
+    starts = [i for i, line in enumerate(lines)
+              if re.fullmatch(r"(?:https://)?" + re.escape(domain) + r"\s*\{\s*", line.strip())]
+    if len(starts) != 1:
+        raise ManagerError("ambiguous_proxy", "Le bloc du site Grocy doit être unique", 409)
+    end = _block(lines, starts[0])
+    return any(re.fullmatch(r"reverse_proxy mon-grocy-live:8093", line.strip())
+               for line in lines[starts[0]:end])
+
+
 def migrate_caddy(content: bytes, origin: str, base_path: str):
     domain = urlsplit(origin).netloc
     if not domain or not re.fullmatch(r"(?:/[A-Za-z0-9_-]+)+", base_path):

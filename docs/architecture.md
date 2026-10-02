@@ -62,7 +62,11 @@ const settings = await addon.getStorage('settings');
 await addon.putStorage('settings', { ...settings.data, affichage: 'detail' });
 ```
 
-Le SDK fournit aussi `runtime`, `register`, `assetUrl` et les adaptateurs `compatFetch`, `compatApi`, `compatWindow` et `compatStorage`. Les modules d’addons peuvent partager des moteurs explicitement déclarés. La facade legacy traduit les anciens contrats utilisés par le lot ; elle ne rétablit pas un jeton privilégié NerdCore.
+Le SDK fournit aussi `runtime`, `register`, `assetUrl`, `scope(id).events(after)` et `tasks()`. Les événements restent dans le namespace demandé ; les tâches appartiennent au compte connecté et signalent notamment `needs-reconciliation`. Leur consultation ne répète aucune mutation. `settings()` expose les réglages chargés avec la session. Les adaptateurs `compatFetch`, `compatApi`, `compatWindow` et `compatStorage` conservent les contrats livrés. Les modules d’addons peuvent partager des moteurs explicitement déclarés. La facade legacy traduit les anciens contrats utilisés par le lot ; elle ne rétablit pas un jeton privilégié NerdCore.
+
+Le transport binaire est limité aux images Grocy de produits, recettes et utilisateurs, via `PUT api/files/...`, une enveloppe base64 et un type PNG, JPEG, WebP ou GIF explicite. Le serveur contrôle le nom, le type, la structure du conteneur et les dimensions avant transmission ; il refuse les autres contenus, notamment HTML/SVG. Ce contrôle n’est pas un décodage complet du codec. L’opération conserve les droits et l’idempotence de la requête utilisateur.
+
+Les fonctions non sensibles de cette façade sont maintenues au moins 90 jours après la release effective 1.0.0 et jusqu’à deux versions mineures au minimum (`1.2.0`), avec les deux conditions requises avant retrait. Aucun délai n’arrête automatiquement la façade dans ce lot. `getUpdateToken()` renvoie une chaîne vide ; `setUpdateToken()` n’a aucun effet. Les fermetures d’adaptation des neuf addons ne reçoivent aucun secret serveur.
 
 Les familles runtime comprennent `core.pair`, `external.fetch`, `barcode.search`, `receipt-memory.*`, `courseu.state.*`, `sessions.live`, `credential.store`, `credentials.status` et `addons.*`. L’appairage `core.pair` est réservé à l’administrateur connecté et configure le service depuis cette identité validée. Les opérations inconnues sont refusées. Les clés de fournisseurs se configurent côté serveur avec un compte administrateur ; les documents ordinaires ne doivent pas contenir de secret.
 
@@ -74,6 +78,8 @@ Un manifeste source donne l’identité, la version, la compatibilité Grocy/COR
 
 Le gestionnaire prépare les fichiers dans une zone intermédiaire, vérifie les dépendances et publie une seule nouvelle génération de `current.json`. Il conserve le registre précédent dans `history`. Une réinstallation identique devient un `noop`. Une modification ne doit pas rendre incompatible un addon déjà actif. La désactivation d’une dépendance utilisée est refusée ; le retour à une version antérieure repasse par les contrôles de signature, de fichiers et de dépendances.
 
+La désinstallation retire l’addon du registre et refuse de casser une dépendance active. Elle conserve cache des paquets et historique ; elle ne supprime pas les documents compagnons ni les données Grocy. Les octets d’un identifiant/version déjà présent restent immuables : une archive resignée différente demande une nouvelle version pour une distribution installée.
+
 Le runtime d’un addon peut être exécuté par un service dédié après validation de son paquet. Le gestionnaire n’exécute aucun script d’installation fourni par le paquet et n’a pas de socket Docker ni d’accès de mutation à Grocy.
 
 ## Migration et reprise
@@ -82,7 +88,7 @@ La préparation reconnaît les assemblages legacy attendus et sauvegarde les fic
 
 Le verrou d’installation couvre le parcours complet. Les quatre anciens services reconnus qui peuvent réécrire le chargeur sont retirés sous sauvegarde privée avant le snapshot final. La fermeture de leur route d’administration et l’absence de vérificateur actif de l’ancien secret sont des constats distincts d’une rotation cryptographique. Le retour ne recrée pas ces services.
 
-La reprise live préserve l’état brut avant et après arrêt de l’ancien propriétaire reconnu, puis reprend sessions et commandes dans l’état compagnon. Seuls les anciens minuteurs locaux annulés sont archivés automatiquement ; les autres états bloquent pour rapprochement. Aucun minuteur natif Grocy n’est créé ou réécrit par cette migration. Le service SharedTimers reste le propriétaire de l’état live actif, tandis que Grocy conserve ses minuteurs natifs.
+La reprise live exige la sélection explicite de l’ancien conteneur reconnu par `--legacy-live-container mon-grocy-live`. Sans cette option, une installation neuve ou une autre instance ne recherche ni n’arrête ce propriétaire global ; un site Caddy qui le cible est refusé avant écriture. La reprise sélectionnée préserve l’état brut avant et après arrêt, puis reprend sessions et commandes dans l’état compagnon. Seuls les anciens minuteurs locaux annulés sont archivés automatiquement ; les autres états bloquent pour rapprochement. Aucun minuteur natif Grocy n’est créé ou réécrit par cette migration. Le service SharedTimers reste le propriétaire de l’état live actif, tandis que Grocy conserve ses minuteurs natifs.
 
 L’activation compare le chargeur actuel, le reçu et les empreintes métier. Elle écrit le nouveau chargeur atomiquement. Si une modification concurrente rend l’état incertain, le reçu signale la réconciliation nécessaire. Cette protection porte sur les tables explicitement suivies par le code, et ne remplace pas une sauvegarde générale de l’instance.
 

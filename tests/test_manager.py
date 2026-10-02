@@ -2,6 +2,7 @@
 import base64
 import hashlib
 import json
+import os
 from pathlib import Path
 import stat
 import zipfile
@@ -76,6 +77,85 @@ def test_dependency_install_is_atomic_and_cannot_disable_required(manager):
     with pytest.raises(ManagerError) as error:
         service.disable("dep")
     assert error.value.code == "required_dependency"
+
+
+def test_uninstall_is_targeted_preserves_cache_and_reinstall_reverifies_bytes(manager):
+    service, key = manager
+    dependency_zip = package(service.root / "incoming", key, "dependency")
+    main_zip = package(service.root / "incoming", key, "main", dependencies={"dependency": "1.0.0"})
+    package(service.root / "incoming", key, "independent")
+    service.install("main", "1.0.0")
+    service.install("independent", "1.0.0")
+    before = service.registry.read_bytes()
+    cached = {path: hashlib.sha256(path.read_bytes()).hexdigest()
+              for path in (dependency_zip, main_zip)}
+    with pytest.raises(ManagerError) as error:
+        service.uninstall("dependency")
+    assert error.value.code == "required_dependency"
+    assert service.registry.read_bytes() == before
+    for target in ("all", "unknown", "../main"):
+        with pytest.raises(ManagerError):
+            service.uninstall(target)
+        assert service.registry.read_bytes() == before
+    old = service.current()
+    result = service.uninstall("main")
+    assert result["status"] == "uninstalled" and result["cachedPackagesRetained"]
+    current = service.current()
+    assert current["generation"] == old["generation"] + 1
+    assert current["addons"] == {name: entry for name, entry in old["addons"].items() if name != "main"}
+    assert json.loads((service.root / "history" / f"{old['generation']}.json").read_bytes()) == old
+    assert all(hashlib.sha256(path.read_bytes()).hexdigest() == digest for path, digest in cached.items())
+    assert Path(old["addons"]["main"]["packageDir"]).is_dir()
+    assert service.install("main", "1.0.0")["generation"] == old["generation"] + 2
+    assert service.current()["addons"]["main"]["manifest"] == old["addons"]["main"]["manifest"]
+    service.uninstall("main")
+    Path(old["addons"]["main"]["packageDir"]).joinpath("dist/addon.js").write_bytes(b"tampered")
+    unchanged = service.registry.read_bytes()
+    with pytest.raises(ManagerError) as error:
+        service.install("main", "1.0.0")
+    assert error.value.code == "installed_corrupt"
+    assert service.registry.read_bytes() == unchanged
+
+
+@pytest.mark.skipif(os.name != "posix", reason="Private Unix socket is deployed on Linux")
+def test_uninstall_wire_endpoint_updates_one_entry_and_records_job(manager):
+    import socketserver
+    import threading
+    from grocyste.manager import ManagerHandler
+    from grocyste.runtime import ApiError, call_manager
+    service, key = manager
+    package(service.root / "incoming", key, "sample")
+    package(service.root / "incoming", key, "independent")
+    package(service.root / "incoming", key, "dependent", dependencies={"independent": "1.0.0"})
+    service.install("sample", "1.0.0")
+    service.install("independent", "1.0.0")
+    service.install("dependent", "1.0.0")
+    class Server(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
+        daemon_threads = True
+    socket = service.root / "manager.sock"
+    with Server(str(socket), ManagerHandler) as server:
+        server.manager = service
+        thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.02}, daemon=True)
+        thread.start()
+        try:
+            result = call_manager(str(socket), "uninstall", {"addonId": "sample"})
+            assert result["status"] == "uninstalled" and result["cachedPackagesRetained"]
+            job = json.loads((service.root / "jobs" / (result["jobId"] + ".json")).read_bytes())
+            assert job["status"] == "complete" and job["result"] == result
+            remaining = service.registry.read_bytes()
+            with pytest.raises(ApiError) as error:
+                call_manager(str(socket), "uninstall", {"addonId": "all"})
+            assert error.value.status == 404
+            assert str(error.value) == "Addon inconnu"
+            with pytest.raises(ApiError) as error:
+                call_manager(str(socket), "uninstall", {"addonId": "independent"})
+            assert error.value.status == 409
+            assert str(error.value) == "Un addon actif utilise cette dépendance"
+            assert service.registry.read_bytes() == remaining
+            assert set(service.current()["addons"]) == {"independent", "dependent"}
+        finally:
+            server.shutdown()
+            thread.join(timeout=3)
 
 
 def test_upgrade_cannot_break_other_enabled_addon(manager):

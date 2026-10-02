@@ -60,6 +60,10 @@ function createGrocysteSdk({ windowObject = globalThis.window, base = '/__grocys
         const result = await wire(`/storage/${addonId}/${encodeURIComponent(key)}`, { method: 'PUT', data: { data: value }, headers: { 'If-Match': String(previous.revision ?? 0) }, ...options });
         stores.set(`${addonId}/${key}`, result); return result;
       },
+      async events(after = 0) {
+        if (!Number.isSafeInteger(after) || after < 0) throw new TypeError('Curseur d’événements invalide');
+        return (await wire(`/events?addonId=${encodeURIComponent(addonId)}&after=${after}`)).events;
+      },
       async credential(provider, secret) {
         if (String(secret).startsWith('grocyste-credential:')) return String(secret);
         await this.runtime('credential.store', { provider, secret });
@@ -239,7 +243,7 @@ function createGrocysteSdk({ windowObject = globalThis.window, base = '/__grocys
     return scope(meta.id);
   }
   const assetUrl = (id, path) => { if (!validId(id) || !/^[a-zA-Z0-9_./-]+$/.test(path) || path.split('/').includes('..')) throw new TypeError('Chemin asset invalide'); return `${configuration.basePath || base.replace(/\/v1$/, '')}/assets/${id}/${path}`; };
-  return Object.freeze({ version: '1.0.0', initialize, authenticate, scope, register, modules, compatFetch, compatApi, compatWindow, compatStorage, migrateLegacyCredentials, prepareAddon, loadImage, observeImages, assetUrl, registered: () => [...registered.values()], configuration: () => configuration, session: () => session ? { user: session.user, isAdmin:session.isAdmin, serviceConfigured:session.serviceConfigured, capabilities: session.capabilities, addons: session.addons } : null, available: () => available, transport: wire });
+  return Object.freeze({ version: '1.0.0', initialize, authenticate, scope, register, modules, compatFetch, compatApi, compatWindow, compatStorage, migrateLegacyCredentials, prepareAddon, loadImage, observeImages, assetUrl, tasks: async () => (await wire('/jobs')).jobs, settings: () => configuration.settings || {}, registered: () => [...registered.values()], configuration: () => configuration, session: () => session ? { user: session.user, isAdmin:session.isAdmin, serviceConfigured:session.serviceConfigured, capabilities: session.capabilities, addons: session.addons } : null, available: () => available, transport: wire });
 }
 
 function coreApiBase(windowObject, documentObject) {
@@ -286,7 +290,7 @@ async function bootGrocyste(windowObject = window, documentObject = document) {
     const row = documentObject.createElement('div'); row.className = 'grocyste-addon-row';
     const label = documentObject.createElement('strong'); label.textContent = `${entry.manifest?.name || entry.id} · ${entry.version || ''} · ${entry.enabled === false ? 'désactivé' : loaded.has(entry.id) ? 'chargé' : 'disponible'}`; row.append(label);
     const admin = session.isAdmin || session.capabilities?.includes?.('addons.manage') || session.capabilities?.includes?.('ADMIN');
-    if (admin) for (const [operation, text] of [['addons.check', 'Vérifier'], ['addons.install', 'Mettre à jour'], ['addons.disable', 'Désactiver'], ['addons.rollback', 'Revenir à la version précédente']]) {
+    if (admin) for (const [operation, text] of [['addons.check', 'Vérifier'], ['addons.install', 'Mettre à jour'], ['addons.disable', 'Désactiver'], ['addons.rollback', 'Revenir à la version précédente'], ['addons.uninstall','Désinstaller']]) {
       const button = documentObject.createElement('button'); button.type = 'button'; button.className = 'btn btn-outline-secondary btn-sm m-1'; button.textContent = text;
       button.onclick = async () => { button.disabled = true; status.textContent = 'Opération en cours…'; try { const catalog=sdk.configuration().catalog;const available=(Array.isArray(catalog?.addons)?catalog.addons:[]).find(addon=>addon.id===entry.id&&addon.tested);const result = await sdk.scope('grocyste').runtime(operation, { addonId: entry.id, version: operation==='addons.install'?available?.version||entry.version:entry.version }); status.textContent = result.jobId ? `Opération enregistrée : ${result.jobId}` : 'Opération terminée. Rechargez la page pour actualiser les assaisonnements.'; } catch (failure) { status.textContent = failure.message; } finally { button.disabled = false; } }; row.append(button);
     }

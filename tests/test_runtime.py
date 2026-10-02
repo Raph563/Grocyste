@@ -2,7 +2,11 @@ import base64
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
+import os
 from pathlib import Path
+import threading
+import struct
+import zlib
 from urllib.parse import urlsplit
 
 import pytest
@@ -11,6 +15,75 @@ from grocyste.bootstrap import BootstrapError, KeyParser, bootstrap_service, boo
 from grocyste.network import HttpResult, NetworkError, external_request
 from grocyste.runtime import create_app, grocy_path
 from grocyste.state import State, StateConflict
+
+
+def test_vault_first_stores_cannot_observe_partial_key(tmp_path, monkeypatch):
+    """Two service workers must share one complete encryption key at first use."""
+    state = State(tmp_path)
+    key_path = tmp_path / "credentials.key"
+    publication_started, release_publication = threading.Event(), threading.Event()
+    second_started, second_finished = threading.Event(), threading.Event()
+    real_open, real_replace = os.open, os.replace
+
+    def pause_publication():
+        publication_started.set()
+        assert release_publication.wait(5), "vault publication did not resume"
+
+    def intercepted_open(path, flags, *args, **kwargs):
+        descriptor = real_open(path, flags, *args, **kwargs)
+        # Covers the old directly visible, empty file as well as the corrected
+        # atomic publication below, so the original regression is reproducible.
+        if Path(path) == key_path and flags & os.O_CREAT:
+            pause_publication()
+        return descriptor
+
+    def intercepted_replace(source, destination, *args, **kwargs):
+        if Path(destination) == key_path:
+            pause_publication()
+        return real_replace(source, destination, *args, **kwargs)
+
+    monkeypatch.setattr(os, "open", intercepted_open)
+    monkeypatch.setattr(os, "replace", intercepted_replace)
+    def second_store():
+        second_started.set()
+        try:
+            return state.credential("gemini", "synthetic-secret-two")
+        finally:
+            second_finished.set()
+    with ThreadPoolExecutor(max_workers=2) as workers:
+        first = workers.submit(state.credential, "openai", "synthetic-secret-one")
+        try:
+            assert publication_started.wait(5)
+            second = workers.submit(second_store)
+            assert second_started.wait(5)
+            # A correctly serialized worker waits. The former implementation
+            # reads the already-visible empty file and raises immediately.
+            second_finished.wait(0.5)
+        finally:
+            release_publication.set()
+        assert first.result(timeout=5) is None
+        assert second.result(timeout=5) is None
+    assert state.credential("openai") == "synthetic-secret-one"
+    assert state.credential("gemini") == "synthetic-secret-two"
+    assert len(key_path.read_bytes()) == 44
+    assert b"synthetic-secret" not in state.path.read_bytes()
+
+
+def test_missing_vault_key_does_not_replace_key_for_existing_ciphertext(tmp_path):
+    state = State(tmp_path)
+    state.credential("openai", "synthetic-existing-secret")
+    path = tmp_path / "credentials.key"
+    original = path.read_bytes()
+    rows = state.credential_status()
+    path.unlink()
+    with pytest.raises(StateConflict, match="clé du coffre"):
+        state.credential("openai")
+    with pytest.raises(StateConflict, match="clé du coffre"):
+        state.credential("gemini", "synthetic-other-secret")
+    assert not path.exists()
+    assert state.credential_status() == rows
+    path.write_bytes(original)
+    assert state.credential("openai") == "synthetic-existing-secret"
 
 
 def result(data, status=200, headers=None):
@@ -180,6 +253,29 @@ def test_manager_requires_explicit_target_and_version(environment):
     assert environment[5] == [("install", {"addonId": "producthelper", "version": "1.0.0"})]
 
 
+def test_uninstall_is_admin_only_csrf_protected_and_idempotent(environment):
+    _, client, headers, grocy, _, calls, _ = environment
+    payload = {"addonId": "producthelper"}
+    data = {"addonId": "grocyste", "operation": "addons.uninstall", "params": payload}
+    assert client.post("/__grocyste/v1/runtime/call", json=data, base_url="https://grocy.test",
+                       headers={"Origin": "https://grocy.test", "Idempotency-Key": "missing-csrf"}).status_code == 401
+    grocy.admin = False
+    assert runtime(environment, "addons.uninstall", payload, key="denied", addon="grocyste").status_code == 403
+    assert not calls
+    grocy.admin = True
+    assert runtime(environment, "addons.uninstall", {}, key="no-target", addon="grocyste").status_code == 400
+    first = runtime(environment, "addons.uninstall", payload, key="uninstall-once", addon="grocyste")
+    assert first.status_code == 200
+    repeated = runtime(environment, "addons.uninstall", payload, key="uninstall-once", addon="grocyste")
+    assert repeated.status_code == 200 and repeated.json == first.json
+    assert calls == [("uninstall", payload)]
+    assert runtime(environment, "addons.uninstall", {"addonId": "receiptscanner"},
+                   key="uninstall-once", addon="grocyste").status_code == 409
+    grocy.admin = False
+    assert runtime(environment, "addons.uninstall", payload, key="uninstall-once", addon="grocyste").status_code == 403
+    assert calls == [("uninstall", payload)]
+
+
 def test_namespace_storage_compare_and_swap(environment):
     _, client, headers, *_ = environment
     url = "/__grocyste/v1/storage/producthelper/settings"
@@ -262,13 +358,39 @@ def test_external_redirect_to_private_host_denied(environment):
 
 
 def test_binary_grocy_upload_and_raw_response(environment):
-    picture = b"\xff\xd8synthetic-jpeg"
-    body = {"addonId": "producthelper", "method": "PUT", "path": "api/files/recipepictures/test.jpg", "data": base64.b64encode(picture).decode(), "bodyEncoding": "base64", "contentType": "image/jpeg", "raw": True}
+    def chunk(kind, data):
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xffffffff)
+    picture = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(b"\0\xff\0\0")) + chunk(b"IEND", b"")
+    filename = base64.b64encode(b"test.png").decode()
+    body = {"addonId": "producthelper", "method": "PUT", "path": "api/files/recipepictures/" + filename, "data": base64.b64encode(picture).decode(), "bodyEncoding": "base64", "contentType": "image/png", "raw": True}
     response = post(environment, "grocy/request", body)
     assert response.status_code == 200 and response.json["bodyEncoding"] == "base64"
     assert environment[3].calls[-1][3] == picture
     body["path"] = "api/objects/products"
     assert post(environment, "grocy/request", body, key="bad-binary").status_code == 400
+
+
+@pytest.mark.parametrize("content,filename,declared_type", [
+    (b"<!doctype html><script>alert(1)</script>", "test.jpg", "image/jpeg"),
+    (b'<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>', "test.png", "image/png"),
+    (b"GIF89a\1\0\1\0\0\0\0;", "test.html", "image/gif"),
+    (b"GIF89a\1\0\1\0\0\0\0;", "test.svg", "image/gif"),
+    (b"\xff\xd8synthetic-jpeg\xff\xd9", "test.jpg", "image/jpeg"),
+    (b"GIF89a\1\0\1\0\0\0\0;", "../test.gif", "image/gif"),
+])
+def test_active_or_invalid_picture_upload_never_reaches_native_file_store(environment, content, filename, declared_type):
+    data = {"addonId": "producthelper", "method": "PUT", "path": "api/files/productpictures/" + base64.b64encode(filename.encode()).decode(),
+            "data": base64.b64encode(content).decode(), "bodyEncoding": "base64", "contentType": declared_type}
+    before = len(environment[3].calls)
+    assert post(environment, "grocy/request", data).status_code == 400
+    assert not any(call[1] == "PUT" for call in environment[3].calls[before:])
+
+
+def test_picture_put_cannot_bypass_binary_validation_with_json(environment):
+    data = {"addonId": "producthelper", "method": "PUT", "path": "api/files/productpictures/" + base64.b64encode(b"test.html").decode(),
+            "data": "<script>alert(1)</script>", "contentType": "image/jpeg"}
+    assert post(environment, "grocy/request", data).status_code == 400
+    assert not any(call[1] == "PUT" for call in environment[3].calls)
 
 
 def test_assets_require_declared_integrity_and_package_boundary(environment, tmp_path):

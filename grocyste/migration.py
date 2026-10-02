@@ -208,6 +208,21 @@ def activate(receipt_directory: Path):
         current = target.read_bytes() if target.exists() else b""
         if digest(current) == value["newSha256"] and value["status"] == "active":
             return {"status": "noop", "receiptId": value["id"]}
+        if value["status"] == "activating":
+            # A crash may occur on either side of the atomic loader replacement.
+            # Reconcile observed bytes and business state instead of blindly writing.
+            restored = (receipt_directory / "new-custom_js.html").read_bytes()
+            observed = fingerprints(data / "grocy.db") if (data / "grocy.db").exists() else {}
+            if digest(restored) != value["newSha256"] or observed != value["protectedBefore"]:
+                raise ManagerError("reconciliation_required", "Activation interrompue ; les empreintes exigent une réconciliation", 409)
+            if digest(current) == value["newSha256"]:
+                value.update(status="active", protectedAfter=observed, reconciledAfterInterruption=True)
+                atomic_bytes(receipt_file, canonical(value))
+                return {"status": "reconciled", "receiptId": value["id"], "protectedUnchanged": True}
+            if digest(current) == value["oldSha256"]:
+                value["status"] = "prepared"
+                value["reconciledAfterInterruption"] = True
+                atomic_bytes(receipt_file, canonical(value))
         if value["status"] != "prepared" or digest(current) != value["oldSha256"]:
             raise ManagerError("loader_drift", "Le chargeur a changé ; activation refusée", 409)
         before = fingerprints(data / "grocy.db") if (data / "grocy.db").exists() else {}

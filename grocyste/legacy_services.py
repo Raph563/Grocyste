@@ -44,10 +44,52 @@ def strip_services(content: bytes, names: set[str]) -> bytes:
         raise ManagerError("ambiguous_legacy_compose", "Services absents ou dupliqués", 409)
     removed = set()
     for index, (begin, name) in enumerate(keys):
+        stop = keys[index + 1][0] if index + 1 < len(keys) else end
         if name in names:
-            stop = keys[index + 1][0] if index + 1 < len(keys) else end
             removed.update(range(begin, stop))
+            continue
+        # Remaining services can explicitly depend on the retired writers.
+        # Only the plain list form is edited; resolved Compose equality below
+        # still proves that every other setting and dependency is preserved.
+        for i in range(begin + 1, stop):
+            if not re.fullmatch(r"    depends_on:\s*(?:#.*)?", lines[i].rstrip("\r\n")):
+                continue
+            finish = next((j for j in range(i + 1, stop) if lines[j].strip()
+                           and not lines[j].startswith("      ")
+                           and not lines[j].lstrip().startswith("#")), stop)
+            entries = []
+            for j in range(i + 1, finish):
+                if not lines[j].strip() or lines[j].lstrip().startswith("#"):
+                    continue
+                entry = re.fullmatch(r"      - ([A-Za-z0-9][A-Za-z0-9_.-]*)\s*(?:#.*)?",
+                                     lines[j].rstrip("\r\n"))
+                if not entry:
+                    entries = None
+                    break
+                entries.append((j, entry[1]))
+            if entries is None:
+                continue  # Unsupported syntax fails the resolved validation.
+            removed.update(j for j, dependency in entries if dependency in names)
+            if entries and all(dependency in names for _, dependency in entries):
+                removed.add(i)
     return "".join(line for i, line in enumerate(lines) if i not in removed).encode("utf-8")
+
+
+def remaining_configuration(configuration, names):
+    services = {}
+    for name, service in configuration["services"].items():
+        if name in names:
+            continue
+        service = dict(service)
+        dependencies = service.get("depends_on")
+        if isinstance(dependencies, dict):
+            kept = {key: value for key, value in dependencies.items() if key not in names}
+            if kept:
+                service["depends_on"] = kept
+            else:
+                service.pop("depends_on", None)
+        services[name] = service
+    return {**configuration, "services": services}
 
 
 def inspect_optional(command, name):
@@ -124,6 +166,12 @@ def retire(data_directory: Path, receipt_root: Path, origin: str, command, closu
             for name in SERVICES:
                 item = inspect_optional(command, name)
                 if item:
+                    # Other Grocy installations may coexist on this host. Their
+                    # loader writers belong to a different data directory.
+                    if not any(m.get("Type") == "bind" and m.get("RW") is True
+                            and Path(m.get("Source", "")).resolve() == data_directory.resolve().parent
+                            for m in item.get("Mounts", [])):
+                        continue
                     services.append(recognized(item, name, data_directory.resolve()))
             if not services:
                 return {"status": "absent", "services": [], "knownLegacyServicesAbsent": True}
@@ -148,8 +196,7 @@ def retire(data_directory: Path, receipt_root: Path, origin: str, command, closu
                     atomic_bytes(temporary, candidate)
                     invocation = items[0]["compose"][:-1] + [str(temporary), "config", "--format", "json"]
                     verified = load_json(command(invocation, output=True).encode(), 4 * 1024 * 1024)
-                    expected = {**configuration, "services": {
-                        key: value for key, value in configuration["services"].items() if key not in names}}
+                    expected = remaining_configuration(configuration, names)
                     if verified != expected:
                         raise ManagerError("legacy_compose_drift", "Retrait Compose non vérifié", 409)
                 finally:

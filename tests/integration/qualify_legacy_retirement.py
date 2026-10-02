@@ -18,8 +18,9 @@ import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from grocyste.legacy_services import SERVICES, check_closed, retire
+from lab_support import lab_root
 
-LAB = Path("/home/wwadmin/grocyste-work/lab")
+LAB = lab_root()
 
 
 def run(arguments, *, output=False, timeout=60):

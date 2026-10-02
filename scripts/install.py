@@ -6,6 +6,7 @@ authenticated browser pairing, never shell arguments. No Grocy DB writes.
 """
 from __future__ import annotations
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -201,7 +202,10 @@ def caddy_plan(metadata, host_file, container):
     environment_files = environment.split(",") if environment else []
     if (not Path(working).is_absolute() or not Path(working).is_dir()
             or not paths or any(not path or any(ord(c) < 32 for c in path)
-                or not Path(path).is_absolute() or not Path(path).is_file() for path in paths + environment_files)):
+                or not Path(path).is_absolute() or not Path(path).is_file() for path in paths)
+            or any(not path or any(ord(c) < 32 for c in path)
+                or (path != "/dev/null" and (not Path(path).is_absolute() or not Path(path).is_file()))
+                for path in environment_files)):
         return manual
     if not environment_files:
         project_env = Path(working) / ".env"
@@ -287,6 +291,8 @@ def main():
     credentials.add_argument("--admin-key-file", type=Path, help="Fichier privé contenant la clé admin de provisionnement")
     credentials.add_argument("--existing-key-file", type=Path, help="Fichier privé contenant une clé de service déjà créée")
     parser.add_argument("--prepare-only", action="store_true", help="Préparer sauvegarde et configuration sans activation")
+    parser.add_argument("--legacy-live-container", choices=["mon-grocy-live"],
+                        help="Migrer explicitement le sidecar Mon Grocy historique de cette instance")
     args = parser.parse_args()
     if os.name == "nt":
         raise RuntimeError("Exécuter cette commande sur le serveur Linux Grocy")
@@ -324,6 +330,10 @@ def install(args, home):
         raise RuntimeError("Une origine HTTPS sans chemin est requise")
     if not re.fullmatch(r"(?:/[A-Za-z0-9_-]+)+", args.base_path):
         raise RuntimeError("Chemin Grocyste invalide")
+    if args.caddyfile and not args.legacy_live_container:
+        from grocyste.proxy import uses_legacy_live
+        if uses_legacy_live(args.caddyfile.read_bytes(), origin):
+            raise RuntimeError("Ce site utilise le sidecar live historique ; préciser --legacy-live-container mon-grocy-live pour préserver son état avant la bascule")
     for relative in ("state", "state/secrets", "state/live", "state/config", "packages", "packages/incoming", "run", "receipts", "trust"):
         directory(home / relative, private=relative.startswith(("state", "receipts")))
     # The live service mounts this directory read-only; atomic updates remain visible.
@@ -352,7 +362,10 @@ def install(args, home):
         result = prepare(data.resolve(), home / "receipts", args.base_path)
         print(json.dumps({"status": "prepared", "migration": result}, ensure_ascii=False))
         return
-    compose = ["docker", "compose", "--env-file", str(home / ".env"), "-f", str(ROOT / "compose.yaml")]
+    # Source folders change between releases; one home must retain one owner.
+    project = "grocyste-" + hashlib.sha256(str(home).encode()).hexdigest()[:12]
+    compose = ["docker", "compose", "--project-name", project,
+               "--env-file", str(home / ".env"), "-f", str(ROOT / "compose.yaml")]
     command(compose + ["build"])
     common = ["docker", "run", "--rm", "--network", args.network,
               "-v", f"{home}/state:/state", "-v", f"{home}/packages:/packages",
@@ -399,7 +412,7 @@ def install(args, home):
             owned_bytes(target, source.read_bytes())
         elif target.exists():
             private_file(target)
-    live_migration = migrate_live(home, command)
+    live_migration = migrate_live(home, command, selected=bool(args.legacy_live_container))
     command(compose + ["up", "-d"])
     public_health("http://127.0.0.1:8788", args.base_path)
     service_health(compose)

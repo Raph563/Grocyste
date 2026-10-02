@@ -5,14 +5,13 @@ This does not install or upgrade dependencies. Review generated files before
 rebuilding and auditing; the lock is a record of the supplied image environments.
 """
 from concurrent.futures import ThreadPoolExecutor
+import argparse
 import hashlib
 import json
 from pathlib import Path
 import re
 import subprocess
 from urllib.request import Request, urlopen
-
-OUT = Path("/home/wwadmin/grocyste-work/lab/security/locks")
 
 
 def freeze(image):
@@ -66,20 +65,26 @@ def render(names, metadata, header):
 
 
 def main():
-    runtime, development = freeze("local/grocyste-lab:1.0.0"), freeze("local/grocyste-tests:1.0.0")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--runtime-image", required=True)
+    parser.add_argument("--tests-image", required=True)
+    parser.add_argument("--output", type=Path, required=True)
+    args = parser.parse_args()
+    output = args.output.resolve()
+    runtime, development = freeze(args.runtime_image), freeze(args.tests_image)
     if any(development.get(name) != version for name, version in runtime.items()):
         raise RuntimeError("Les images runtime et tests ont des versions incohérentes")
     with ThreadPoolExecutor(max_workers=8) as pool:
         metadata = dict(pool.map(release, sorted(development.items())))
-    OUT.mkdir(parents=True, exist_ok=True)
-    (OUT / "requirements.lock.txt").write_text(render(runtime, metadata, "Runtime Python 3.12 ; versions exactes et SHA-256."))
+    output.mkdir(parents=True, exist_ok=True)
+    (output / "requirements.lock.txt").write_text(render(runtime, metadata, "Runtime Python 3.12 ; versions exactes et SHA-256."))
     extras = set(development) - set(runtime)
-    (OUT / "requirements-dev.lock.txt").write_text("-r requirements.lock.txt\n" + render(extras, metadata,
+    (output / "requirements-dev.lock.txt").write_text("-r requirements.lock.txt\n" + render(extras, metadata,
         "Dépendances supplémentaires de qualification ; versions exactes et SHA-256."))
-    (OUT / "requirements-bootstrap.lock.txt").write_text(render(["pip"], metadata, "pip avant installation des dépendances."))
-    (OUT / "provenance.json").write_text(json.dumps(metadata, sort_keys=True, indent=2) + "\n")
+    (output / "requirements-bootstrap.lock.txt").write_text(render(["pip"], metadata, "pip avant installation des dépendances."))
+    (output / "provenance.json").write_text(json.dumps(metadata, sort_keys=True, indent=2) + "\n")
     print(json.dumps({"runtimeDependencies": len(runtime), "developmentDependencies": len(development),
-        "sources": "https://pypi.org/pypi/<name>/<version>/json", "directory": str(OUT)}))
+        "sources": "https://pypi.org/pypi/<name>/<version>/json", "directory": str(output)}))
 
 
 if __name__ == "__main__":

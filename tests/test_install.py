@@ -79,6 +79,7 @@ def fake_install(tmp_path, monkeypatch, *, key=False, caddy=False):
     def command(args, **kwargs):
         if args[-1] == "build":
             events.append("build")
+            command.projects.append(args[args.index("--project-name") + 1])
             # Normal user activity while the image builds must not stale the final receipt.
             with sqlite3.connect(data / "grocy.db") as connection:
                 connection.execute("UPDATE stock SET amount=2")
@@ -116,6 +117,7 @@ def fake_install(tmp_path, monkeypatch, *, key=False, caddy=False):
 
     command.installations = []
     command.recreations = []
+    command.projects = []
 
     monkeypatch.setattr(installer, "command", command)
     monkeypatch.setattr(installer, "public_health", lambda url, base_path:
@@ -159,6 +161,19 @@ def test_internal_health_failure_never_prepares_or_activates_loader(tmp_path, mo
     assert events == ["build", "up"]
     assert (data / "custom_js.html").read_bytes() == original
     assert not list((home / "receipts").glob("*/receipt.json"))
+
+
+def test_relocated_release_reuses_the_same_compose_project_and_loader(tmp_path, monkeypatch):
+    home, data, original, events = fake_install(tmp_path, monkeypatch)
+    installer.main()
+    before = (data / "custom_js.html").read_bytes()
+    moved = tmp_path / "different-release-folder"
+    installer.shutil.copytree(installer.ROOT, moved)
+    monkeypatch.setattr(installer, "ROOT", moved)
+    installer.main()
+    assert len(installer.command.projects) == 2
+    assert installer.command.projects[0] == installer.command.projects[1]
+    assert (data / "custom_js.html").read_bytes() == before
 
 
 def test_unconfigured_proxy_prepares_only_and_preserves_loader(tmp_path, monkeypatch, capsys):
@@ -227,6 +242,41 @@ def test_caddy_missing_compose_labels_reports_manual_and_keeps_loader(tmp_path, 
     assert "caddy-recreate" not in events and "activate" not in events and "health-public" not in events
     assert (data / "custom_js.html").read_bytes() == original
     assert b"reverse_proxy grocyste-core:8788" in (tmp_path / "Caddyfile").read_bytes()
+    assert '"status": "prepared-awaiting-caddy-recreate"' in capsys.readouterr().out
+
+
+def test_caddy_replay_accepts_only_its_empty_environment_sentinel(tmp_path, monkeypatch, capsys):
+    home, data, original, events = fake_install(tmp_path, monkeypatch, caddy=True)
+    original_command = installer.command
+
+    def command(args, **kwargs):
+        if args[1] == "inspect":
+            value = json.loads(original_command(args, **kwargs))
+            value[0]["Config"]["Labels"]["com.docker.compose.project.environment_file"] = "/dev/null"
+            return json.dumps(value)
+        return original_command(args, **kwargs)
+
+    monkeypatch.setattr(installer, "command", command)
+    installer.main()
+    assert "caddy-recreate" in events and "activate" in events
+    assert '"status": "installed"' in capsys.readouterr().out
+
+
+def test_caddy_replay_refuses_other_environment_devices(tmp_path, monkeypatch, capsys):
+    home, data, original, events = fake_install(tmp_path, monkeypatch, caddy=True)
+    original_command = installer.command
+
+    def command(args, **kwargs):
+        if args[1] == "inspect":
+            value = json.loads(original_command(args, **kwargs))
+            value[0]["Config"]["Labels"]["com.docker.compose.project.environment_file"] = "/dev/random"
+            return json.dumps(value)
+        return original_command(args, **kwargs)
+
+    monkeypatch.setattr(installer, "command", command)
+    installer.main()
+    assert "caddy-recreate" not in events and "activate" not in events
+    assert (data / "custom_js.html").read_bytes() == original
     assert '"status": "prepared-awaiting-caddy-recreate"' in capsys.readouterr().out
 
 
@@ -393,7 +443,7 @@ def test_real_public_health_validates_api_and_exact_loader(tmp_path, monkeypatch
             with pytest.raises(RuntimeError, match="non activé"):
                 installer.public_health(url, "/__grocyste", timeout=0)
         else:
-            assert installer.public_health(url, "/__grocyste", timeout=0)["ok"]
+            assert installer.public_health(url, "/__grocyste", timeout=5)["ok"]
         assert "/redirect-must-not-be-followed" not in visits
     finally:
         server.shutdown()

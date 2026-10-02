@@ -20,8 +20,9 @@ import uuid
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from grocyste.hostutils import ManagerError
 from grocyste.migration import activate, digest, fingerprints, loader, prepare, rollback
+from lab_support import lab_root
 
-LAB = Path("/home/wwadmin/grocyste-work/lab")
+LAB = lab_root()
 LOADER_SHA = "87b88f2ac0ee463a68bbc4ad0fde5921450bee77d4749d939e139f03a45c43e6"
 BUDGET_SHA = "37d0902fd23131d30a65e004b9ecf79c11a90716f67332e52c1dc0dc48cc14ab"
 

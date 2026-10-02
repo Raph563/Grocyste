@@ -9,6 +9,8 @@ import secrets
 import sqlite3
 import time
 
+from .hostutils import atomic_bytes, file_lock
+
 
 class StateConflict(Exception):
     pass
@@ -181,25 +183,24 @@ class State:
         from cryptography.fernet import Fernet
         key_path = self.directory / "credentials.key"
         self.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
-        if secret is not None and not key_path.exists():
-            key = Fernet.generate_key()
-            try:
-                fd = os.open(key_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-                with os.fdopen(fd, "wb") as stream:
-                    stream.write(key)
-                    stream.flush()
-                    os.fsync(stream.fileno())
-            except FileExistsError:
-                pass
-        if not key_path.exists():
-            return None
-        cipher = Fernet(key_path.read_bytes())
-        with self.db(secret is not None) as db:
-            if secret is not None:
-                db.execute("INSERT INTO credentials VALUES (?,?,?) ON CONFLICT(provider) DO UPDATE SET ciphertext=excluded.ciphertext,updated=excluded.updated", (provider, cipher.encrypt(secret.encode()).decode(), time.time()))
-                return None
-            row = db.execute("SELECT ciphertext FROM credentials WHERE provider=?", (provider,)).fetchone()
-        return cipher.decrypt(row["ciphertext"].encode()).decode() if row else None
+        # Readers participate too: a different worker must not observe an empty
+        # first-use key, and two writers must never encrypt with different keys.
+        # Preserve any existing key; corruption requires explicit reconciliation.
+        with file_lock(self.directory / ".credentials.lock"):
+            if not key_path.exists():
+                with self.db() as db:
+                    if db.execute("SELECT 1 FROM credentials LIMIT 1").fetchone():
+                        raise StateConflict("La clé du coffre est absente ; une restauration explicite est requise.")
+                if secret is None:
+                    return None
+                atomic_bytes(key_path, Fernet.generate_key())
+            cipher = Fernet(key_path.read_bytes())
+            with self.db(secret is not None) as db:
+                if secret is not None:
+                    db.execute("INSERT INTO credentials VALUES (?,?,?) ON CONFLICT(provider) DO UPDATE SET ciphertext=excluded.ciphertext,updated=excluded.updated", (provider, cipher.encrypt(secret.encode()).decode(), time.time()))
+                    return None
+                row = db.execute("SELECT ciphertext FROM credentials WHERE provider=?", (provider,)).fetchone()
+            return cipher.decrypt(row["ciphertext"].encode()).decode() if row else None
 
     def credential_status(self):
         with self.db() as db:

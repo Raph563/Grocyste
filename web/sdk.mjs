@@ -59,6 +59,10 @@ export function createGrocysteSdk({ windowObject = globalThis.window, base = '/_
         const result = await wire(`/storage/${addonId}/${encodeURIComponent(key)}`, { method: 'PUT', data: { data: value }, headers: { 'If-Match': String(previous.revision ?? 0) }, ...options });
         stores.set(`${addonId}/${key}`, result); return result;
       },
+      async events(after = 0) {
+        if (!Number.isSafeInteger(after) || after < 0) throw new TypeError('Curseur d’événements invalide');
+        return (await wire(`/events?addonId=${encodeURIComponent(addonId)}&after=${after}`)).events;
+      },
       async credential(provider, secret) {
         if (String(secret).startsWith('grocyste-credential:')) return String(secret);
         await this.runtime('credential.store', { provider, secret });
@@ -238,5 +242,5 @@ export function createGrocysteSdk({ windowObject = globalThis.window, base = '/_
     return scope(meta.id);
   }
   const assetUrl = (id, path) => { if (!validId(id) || !/^[a-zA-Z0-9_./-]+$/.test(path) || path.split('/').includes('..')) throw new TypeError('Chemin asset invalide'); return `${configuration.basePath || base.replace(/\/v1$/, '')}/assets/${id}/${path}`; };
-  return Object.freeze({ version: '1.0.0', initialize, authenticate, scope, register, modules, compatFetch, compatApi, compatWindow, compatStorage, migrateLegacyCredentials, prepareAddon, loadImage, observeImages, assetUrl, registered: () => [...registered.values()], configuration: () => configuration, session: () => session ? { user: session.user, isAdmin:session.isAdmin, serviceConfigured:session.serviceConfigured, capabilities: session.capabilities, addons: session.addons } : null, available: () => available, transport: wire });
+  return Object.freeze({ version: '1.0.0', initialize, authenticate, scope, register, modules, compatFetch, compatApi, compatWindow, compatStorage, migrateLegacyCredentials, prepareAddon, loadImage, observeImages, assetUrl, tasks: async () => (await wire('/jobs')).jobs, settings: () => configuration.settings || {}, registered: () => [...registered.values()], configuration: () => configuration, session: () => session ? { user: session.user, isAdmin:session.isAdmin, serviceConfigured:session.serviceConfigured, capabilities: session.capabilities, addons: session.addons } : null, available: () => available, transport: wire });
 }

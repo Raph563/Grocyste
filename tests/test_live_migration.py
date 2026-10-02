@@ -51,7 +51,7 @@ def live_fixture(tmp_path):
 
 def test_live_migration_captures_stopped_writer_and_replays_without_overwriting_progress(tmp_path):
     home, source, state, command = live_fixture(tmp_path)
-    result = migrate(home, command)
+    result = migrate(home, command, selected=True)
     target = home / "state/live/live-state.json"
     value = json.loads(target.read_bytes())
     assert result["nativeTimerWrites"] == 0 and result["archivedCancelledShadowTimers"] == 1
@@ -61,20 +61,20 @@ def test_live_migration_captures_stopped_writer_and_replays_without_overwriting_
     value["sessions"][0]["revision"] = 3
     atomic_bytes(target, canonical(value))
     count = sum(c[1] in {"update", "stop"} for c in state["calls"])
-    assert migrate(home, command)["status"] == "noop"
+    assert migrate(home, command, selected=True)["status"] == "noop"
     assert json.loads(target.read_bytes())["sessions"][0]["revision"] == 3
     assert sum(c[1] in {"update", "stop"} for c in state["calls"]) == count
     state["metadata"]["State"]["Running"] = True
     with pytest.raises(ManagerError, match="actif"):
-        migrate(home, command)
+        migrate(home, command, selected=True)
 
 
 def test_resume_stopped_writer_without_native_timer_writes(tmp_path):
     home, source, state, command = live_fixture(tmp_path)
     state["stop_crash"] = True
     with pytest.raises(RuntimeError):
-        migrate(home, command)
-    assert migrate(home, command)["status"] == "migrated"
+        migrate(home, command, selected=True)
+    assert migrate(home, command, selected=True)["status"] == "migrated"
     assert not any(c[1] in {"rm", "start"} for c in state["calls"])
 
 
@@ -83,10 +83,14 @@ def test_existing_live_destination_and_unknown_owner_refused(tmp_path):
     target = home / "state/live/live-state.json"
     atomic_bytes(target, canonical({"sessions": [{"id": "foreign"}], "commands": []}))
     with pytest.raises(ManagerError, match="déjà utilisé"):
-        migrate(home, command)
+        migrate(home, command, selected=True)
     assert state["metadata"]["State"]["Running"]
     target.unlink()
     state["metadata"]["Config"]["Image"] = "foreign"
     with pytest.raises(ManagerError, match="non reconnu"):
-        migrate(home, command)
+        migrate(home, command, selected=True)
     assert state["metadata"]["State"]["Running"]
+
+
+def test_no_explicit_selection_never_probes_or_stops_other_instance(tmp_path):
+    assert migrate(tmp_path, lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("unexpected Docker call")))["status"] == "not-selected"

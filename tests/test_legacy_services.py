@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 import pytest
 from grocyste.hostutils import ManagerError
-from grocyste.legacy_services import retire, strip_services
+from grocyste.legacy_services import retire, strip_services, remaining_configuration
 
 
 def fixture(tmp_path):
@@ -111,3 +111,37 @@ def test_new_container_after_preparation_requires_reconciliation(tmp_path):
     with pytest.raises(ManagerError, match="changé"):
         retire(data, tmp_path / "receipts", "https://synthetic.example", command, closure=lambda _: None)
     assert state["present"]
+
+
+def test_other_instance_loader_writer_is_not_retired(tmp_path):
+    data, compose, before, state, command = fixture(tmp_path)
+    other = tmp_path / "another-instance/data"
+    other.mkdir(parents=True)
+    result = retire(other, tmp_path / "receipts", "https://other.example", command,
+                    closure=lambda _: (_ for _ in ()).throw(AssertionError("foreign route")))
+    assert result["knownLegacyServicesAbsent"] and "secretVerifierRemoved" not in result
+    assert compose.read_bytes() == before and state["present"]
+    assert not any(c[1] in {"update", "stop", "rm"} for c in state["calls"])
+
+
+def test_retirement_preserves_foreign_dependencies_and_bytes():
+    before = b"services:\n  nerdcore:\n    image: retired\n  caddy:\n    image: preserved\n    depends_on:\n      - grocy\n      - nerdcore\n      - vaultwarden # keep\n    labels:\n      example: unchanged\n  sentinel:\n    image: preserved-too\n    depends_on:\n      - nerdcore\nnetworks:\n  default: {}\n"
+    after = strip_services(before, {"nerdcore"})
+    assert b"      - grocy\n      - vaultwarden # keep\n" in after
+    assert b"    labels:\n      example: unchanged\n" in after
+    assert b"  sentinel:\n    image: preserved-too\nnetworks:" in after
+    assert b"nerdcore" not in after
+    configuration = {"name": "synthetic", "services": {
+        "nerdcore": {"image": "retired"},
+        "caddy": {"image": "preserved", "depends_on": {
+            "grocy": {"condition": "service_started", "required": True},
+            "nerdcore": {"condition": "service_started", "required": True},
+            "vaultwarden": {"condition": "service_healthy", "required": False}}},
+        "sentinel": {"image": "preserved-too", "depends_on": {"nerdcore": {}}}},
+        "networks": {"default": {}}}
+    expected = remaining_configuration(configuration, {"nerdcore"})
+    assert set(expected["services"]["caddy"]["depends_on"]) == {"grocy", "vaultwarden"}
+    assert expected["services"]["caddy"]["depends_on"]["vaultwarden"] == {
+        "condition": "service_healthy", "required": False}
+    assert "depends_on" not in expected["services"]["sentinel"]
+    assert "nerdcore" in configuration["services"]["caddy"]["depends_on"]

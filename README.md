@@ -4,13 +4,17 @@
 
 **Version du CORE : 1.0.0 · cible : Grocy 4.7.1 · licence : GPL-3.0-or-later.**
 
-> La qualification de cette livraison est en cours. Les versions du catalogue ci-dessous viennent des manifestes ; elles ne constituent pas une attestation de migration réussie en production. Voir le [périmètre de compatibilité et de validation](docs/compatibilite.md).
+Les neuf paquets signés ont été exercés sur Grocy **4.7.1**, dans un laboratoire Docker et PHP natif. Les parcours vérifiés et leurs limites sont décrits dans le [rapport de compatibilité](docs/compatibilite.md). Le CORE est également déployé sur une instance existante, avec conservation des données métier. Voir le [rapport de livraison](docs/livraison-1.0.0.md) et [HANDOFF](HANDOFF.md).
+
+![Panneau Grocyste sur une instance de laboratoire synthétique](docs/images/grocyste-core-synthetic.png)
+
+Capture réalisée sur des données synthétiques ; aucun stock, ticket, compte ou média privé de production n’est montré.
 
 ## Ce que le CORE apporte
 
 - **Un seul chargeur dans Grocy.** Le SDK charge les addons actifs après leurs dépendances et ouvre le panneau « Grocyste — Assaisonnements » depuis les réglages.
 - **Les droits du compte connecté.** Les appels métier utilisent la session Grocy de l’utilisateur. L’administration des addons et des clés de fournisseurs exige les droits administrateur, vérifiés côté serveur.
-- **Des paquets contrôlés avant activation.** Le gestionnaire vérifie signature Ed25519, empreintes SHA-256, versions et dépendances, puis remplace atomiquement le registre actif. Il propose installation, désactivation et retour à une version précédente disponible.
+- **Des paquets contrôlés avant activation.** Le gestionnaire vérifie signature Ed25519, empreintes SHA-256, versions et dépendances, puis remplace atomiquement le registre actif. Il propose installation, désactivation, désinstallation et retour à une version précédente disponible.
 - **Un état compagnon.** Sessions, réglages, références de reçus, candidats Course U et suivi des opérations vivent dans l’état Grocyste, séparé de la base métier Grocy.
 - **Une migration traçable.** Le chargeur historique reconnu est remplacé après sauvegarde et contrôle des empreintes. Les personnalisations étrangères au lot sont conservées ; les cas ambigus sont refusés.
 
@@ -24,15 +28,15 @@ Depuis une copie vérifiée de la release sur l’hôte Linux de Grocy, pour l�
 sudo ./scripts/install.sh --origin https://grocy.example.org --caddyfile /opt/grocy/Caddyfile
 ```
 
-Adaptez l’origine et le chemin Caddy. L’outil détecte le dossier de données du conteneur `grocy`, prépare ses sauvegardes, vérifie les paquets de la release et configure les services. Les prérequis, autres paramètres et procédures de reprise sont décrits dans le [guide d’installation](docs/installation.md). La publication des dépôts et des paquets doit précéder une installation publique depuis GitHub.
+Adaptez l’origine et le chemin Caddy. L’outil détecte le dossier de données du conteneur `grocy`, prépare ses sauvegardes, vérifie les paquets de la release et configure les services. Pour reprendre le service live historique reconnu, ajoutez `--legacy-live-container mon-grocy-live` afin de préserver ses sessions avant la bascule. Les prérequis, autres paramètres et procédures de reprise sont décrits dans le [guide d’installation](docs/installation.md). La publication des dépôts et des paquets doit précéder une installation publique depuis GitHub.
 
 Après installation, connectez-vous à Grocy et ouvrez **Réglages → Grocyste — Assaisonnements**, ou la page `/stocksettings?grocyste=1` de votre instance. Avec un compte administrateur, utilisez **Relier cette instance Grocy** si le service n’est pas encore appairé. La gestion des paquets est réservée aux administrateurs ; les autres utilisateurs utilisent les addons autorisés avec leurs propres droits Grocy.
 
 ## Catalogue des neuf assaisonnements
 
-Chaque ligne correspond à un dépôt indépendant. Les liens désignent les dépôts de destination du lot ; leur création et les releases signées doivent être confirmées par le rapport de publication.
+Chaque ligne correspond à un dépôt indépendant et à une version signée qualifiée sur Grocy 4.7.1. Les liens de release sont vérifiés lors de la publication.
 
-| Assaisonnement | Version du manifeste | Usage | Dépendances d’addons |
+| Assaisonnement | Version testée | Usage | Dépendances d’addons |
 | --- | --- | --- | --- |
 | [RecipeScaling](https://github.com/Raph563/Grocyste-RecipeScaling) | `1.0.0` | Adapter les quantités et proportions d’une recette. | Aucune |
 | [RecipeLive](https://github.com/Raph563/Grocyste-RecipeLive) | `1.0.0` | Suivre une recette, ses étapes et les variantes de méthode. | RecipeScaling, SharedTimers |
@@ -44,9 +48,11 @@ Chaque ligne correspond à un dépôt indépendant. Les liens désignent les dé
 | [ProductHelper](https://github.com/Raph563/ProductHelper) | `4.0.43` | Conserver les aides aux produits, marques, codes-barres et imports existants. | StatNerd, ReceiptScanner |
 | [ReceiptScanner](https://github.com/Raph563/ReceiptScanner) | `1.0.4` | Conserver le traitement des tickets et les rapprochements de produits existants. | StatNerd |
 
-Tous déclarent Grocy `4.7.1` et un CORE `>=1.0.0 <2.0.0`. Les dépendances Grocyste suivent `>=1.0.0 <2.0.0` ; les adaptateurs historiques demandent StatNerd `>=4.4.2 <5.0.0` et ReceiptScanner `>=1.0.4 <2.0.0`. **État vérifié de ce tableau : identités, versions, capacités et dépendances des manifestes relues ; qualification des parcours à compléter avec le rapport final.** Un addon n’est présenté comme disponible en production qu’après validation de son parcours et de son paquet publié.
+Tous déclarent Grocy `4.7.1` et un CORE `>=1.0.0 <2.0.0`. Les dépendances Grocyste suivent `>=1.0.0 <2.0.0` ; les adaptateurs historiques demandent StatNerd `>=4.4.2 <5.0.0` et ReceiptScanner `>=1.0.4 <2.0.0`. Les parcours effectivement exercés comprennent les proportions et le suivi live, les prix inconnus qualifiés, les fourchettes absentes, les minuteurs natifs, les trois interfaces historiques, l’OCR/PDF locaux et l’application/relecture/retour d’un import synthétique. Cela ne qualifie pas les appels IA facturés ni une véritable application Android. Les huit échecs historiques du catalogue restent exclus.
 
-Les neuf archives signées et leurs métadonnées sont préparées localement. Le [catalogue descriptif](catalog.json) distingue les résultats automatisés locaux de la qualification sur une instance Grocy normale, encore en cours. Le [catalogue de distribution signé](catalog.signed.json) associe chaque version à une URL de release et à son empreinte ; ces destinations deviennent utilisables après publication des assets. La clé de confiance publique est fournie dans [`trust/catalog.pub`](trust/catalog.pub).
+Les neuf archives signées et leurs métadonnées sont préparées localement. Le [catalogue descriptif](catalog.json) distingue les résultats automatisés locaux de la qualification sur une instance Grocy normale et les limites de chaque addon. Le [catalogue de distribution signé](catalog.signed.json) associe chaque version à une URL de release et à son empreinte ; ces destinations deviennent utilisables après publication des assets. La clé de confiance publique est fournie dans [`trust/catalog.pub`](trust/catalog.pub).
+
+Les trois dépôts historiques conservent leur branche par défaut. Les adaptations Grocyste sont identifiées par les tags [StatNerd v4.4.2](https://github.com/Raph563/StatNerd/tree/v4.4.2), [ProductHelper v4.0.43](https://github.com/Raph563/ProductHelper/tree/v4.0.43) et [ReceiptScanner v1.0.4](https://github.com/Raph563/ReceiptScanner/tree/v1.0.4) ; leurs guides actuels sont ceux de ces versions. Les anciens guides restent archivés comme documentation historique.
 
 ## Architecture
 
@@ -77,21 +83,23 @@ Le CORE et le gestionnaire sont des services séparés. Le gestionnaire écrit l
 
 ## Développer et vérifier
 
-Le serveur demande Python `>=3.12`. Les dépendances sont figées dans [`requirements.txt`](requirements.txt) : Flask `3.1.3`, Gunicorn `26.2.0`, cryptography `50.0.2` et requests `2.34.2`. La construction navigateur et le runtime live utilisent Node.js 24 ; les images Docker déclarent Python `3.12.14` et Node.js `24.21.0`.
+Le serveur demande Python `>=3.12`. Les dépendances directes sont déclarées dans [`requirements.txt`](requirements.txt) : Flask `3.1.3`, Gunicorn `26.2.0`, cryptography `50.0.2` et requests `2.34.2`. Les fichiers [`requirements.lock.txt`](requirements.lock.txt), [`requirements-dev.lock.txt`](requirements-dev.lock.txt) et [`requirements-bootstrap.lock.txt`](requirements-bootstrap.lock.txt) fixent les distributions et leurs empreintes pour l’image et la CI. La construction navigateur et le runtime live utilisent Node.js 24 ; les images Docker déclarent Python `3.12.14` et Node.js `24.21.0` avec leurs digests.
 
 ```sh
-python -m pip install -r requirements-dev.txt
+python -m pip install --require-hashes --only-binary=:all: --no-deps -r requirements-bootstrap.lock.txt
+python -m pip install --require-hashes --only-binary=:all: -r requirements.lock.txt
+python -m pip install --require-hashes --only-binary=:all: -r requirements-dev.lock.txt
 python -m pytest
 node --test web/sdk.test.mjs
 node web/build.mjs
 ```
 
-Le [workflow CI](.github/workflows/tests.yml) exécute les tests Python et SDK sous Linux avec Python 3.12 et Node.js 24. Les tests fabriquent leurs propres clés de signature temporaires : aucune clé privée de release n’est requise en CI. Construire le navigateur ne signe et ne publie aucun paquet.
+Le [workflow CI](.github/workflows/tests.yml) exécute les tests Python et SDK sous Linux avec Python 3.12 et Node.js 24, après installation des dépendances avec contrôle de leurs empreintes. Les tests fabriquent leurs propres clés de signature temporaires : aucune clé privée de release n’est requise en CI. Construire le navigateur ne signe et ne publie aucun paquet.
 
 Pour un nouvel addon, fournissez un manifeste avec identifiant, version, compatibilité, dépendances, capacités et points d’entrée ; utilisez le SDK pour l’accès Grocy et les services externes. Le script de paquetage remplit les empreintes de fichiers avant la signature. Le manifeste source n’est pas le manifeste signé final.
 
 ## Documentation et licence
 
-[Installation et reprise](docs/installation.md) · [Architecture et contrats](docs/architecture.md) · [Compatibilité et validation](docs/compatibilite.md) · [Changements](CHANGELOG.md) · [Provenance](PROVENANCE.md)
+[Installation et reprise](docs/installation.md) · [Architecture et contrats](docs/architecture.md) · [Compatibilité et validation](docs/compatibilite.md) · [Qualification sécurité et résilience](docs/security-validation.md) · [Changements](CHANGELOG.md) · [Provenance](PROVENANCE.md)
 
 Le CORE est distribué sous **GNU GPL version 3 ou ultérieure** ; voir [LICENSE](LICENSE). Chaque addon reste distribué par son propre dépôt, avec ses notices et les licences de ses dépendances tierces.

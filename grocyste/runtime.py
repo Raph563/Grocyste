@@ -23,6 +23,7 @@ from .bootstrap import BootstrapError, bootstrap_service_from_cookie, ensure_tim
 from .network import HttpResult, NetworkError, external_request, internal_request
 from .messages import public_message
 from .permissions import admin_permission_id, has_admin_permission
+from .pictures import PictureError, validate_picture
 from .state import State, StateConflict, canonical
 
 ID = re.compile(r"^[a-z][a-z0-9-]{0,63}$")
@@ -205,7 +206,7 @@ def call_manager(socket_path, action, params):
         response = connection.getresponse()
         payload = json.loads(response.read(1024 * 1024))
         if response.status >= 400:
-            raise ApiError(text(payload.get("error")) or "Manager rejected operation", response.status, "manager_error")
+            raise ApiError(text(payload.get("message")) or "Le gestionnaire a refusé cette opération.", response.status, "manager_error")
         return payload
     except (OSError, ValueError, http.client.HTTPException) as error:
         raise NetworkError("Package manager unavailable") from error
@@ -477,6 +478,8 @@ def create_app(config=None, grocy_transport=None, external_transport=None, manag
         path = grocy_path(body.get("path"))
         binary = None
         content_type = body.get("contentType")
+        if method == "PUT" and path.startswith("api/files/") and body.get("bodyEncoding") is None:
+            raise ApiError("Binary uploads are limited to Grocy pictures")
         if body.get("bodyEncoding") is not None:
             if body["bodyEncoding"] != "base64" or method != "PUT" or not re.fullmatch(r"api/files/(?:productpictures|recipepictures|userpictures)/[^/?]+", path):
                 raise ApiError("Binary uploads are limited to Grocy pictures")
@@ -488,6 +491,10 @@ def create_app(config=None, grocy_transport=None, external_transport=None, manag
                 raise ApiError("Invalid base64 picture") from error
             if len(binary) > 16 * 1024 * 1024:
                 raise ApiError("Picture exceeds upload limit", 413)
+            try:
+                validate_picture(binary, content_type, path.rsplit("/", 1)[-1])
+            except PictureError as error:
+                raise ApiError(str(error)) from error
         addon(body.get("addonId"), "grocy.read" if method in SAFE_METHODS else "grocy.write")
         if body.get("service") is True:
             require_admin()
@@ -727,7 +734,7 @@ def create_app(config=None, grocy_transport=None, external_transport=None, manag
             action = operation.split(".", 1)[1]
             if action == "check":
                 return {"ok": True, "addons": public_addons(registry())}
-            if action not in {"install", "disable", "rollback"}:
+            if action not in {"install", "disable", "rollback", "uninstall"}:
                 raise ApiError("Unsupported addon action")
             target = params.get("addonId", params.get("target"))
             if not isinstance(target, str) or not ID.fullmatch(target):
@@ -843,7 +850,7 @@ def create_app(config=None, grocy_transport=None, external_transport=None, manag
             require_admin()
         execute = lambda: (runtime_operation(body.get("addonId"), operation, params), 200)
         # A provider POST can consume credit / trigger work; never automatically repeat it.
-        write = operation == "core.pair" or operation.endswith((".upsert", ".install", ".disable", ".rollback", ".store", ".clear")) or (operation in {"external.fetch", "sessions.live"} and str(params.get("method", "GET")).upper() == "POST")
+        write = operation == "core.pair" or operation.endswith((".upsert", ".install", ".uninstall", ".disable", ".rollback", ".store", ".clear")) or (operation in {"external.fetch", "sessions.live"} and str(params.get("method", "GET")).upper() == "POST")
         payload, status = mutation(body, execute) if write else execute()
         return jsonify(payload), status
 

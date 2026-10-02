@@ -35,5 +35,5 @@ const configuration=JSON.parse(await readFile(process.env.INSTANCE_CONFIG_FILE||
 const server = await createLiveServer({grocyUrl:process.env.GROCY_URL,
   origin:process.env.PUBLIC_ORIGIN,stateDirectory:process.env.LIVE_STATE_DIRECTORY || '/state',
   packageMeasures:Array.isArray(configuration.recipePackageMeasures)?configuration.recipePackageMeasures:[]});
-server.listen(Number(process.env.PORT || 8093), '0.0.0.0');
+server.listen(Number(process.env.PORT || 8093), process.env.HOST || '0.0.0.0');
 for (const signal of ['SIGTERM','SIGINT']) process.on(signal,()=>server.close(()=>process.exit(0)));

@@ -7,23 +7,27 @@ remove owned fixtures in finally. Cookies and keys are never written to reports.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import base64
 import http.cookiejar
 from http.cookies import SimpleCookie
 import json
 from pathlib import Path
 import secrets
 import ssl
+import struct
 import sys
 import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+import zlib
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from grocy_baseline import Client
+from lab_support import lab_root
 
-LAB = Path("/home/wwadmin/grocyste-work/lab")
+LAB = lab_root()
 ORIGIN = "https://127.0.0.1:19443"
 PREFIX = "/__grocyste/v1/"
 
@@ -90,7 +94,7 @@ def main():
     assert credentials["base_url"] == "http://127.0.0.1:19283"
     admin_api = Client(credentials["base_url"])
     key = credentials["admin_key"]
-    evidence, owned, locations = [], [], []
+    evidence, owned, locations, pictures = [], [], [], []
 
     def check(name, actual, expected):
         allowed = expected if isinstance(expected, tuple) else (expected,)
@@ -187,6 +191,37 @@ def main():
         check("native_admin_recognized", pairing["isAdmin"], True)
         check("core_admin_permission_present", "addons.manage" in pairing["capabilities"], True)
         check("private_api_keys_denied_even_to_core_admin", privileged.proxy("grocyste", "GET", "api/objects/api_keys")[0], 403)
+        picture_name = "grocyste-security-" + uuid.uuid4().hex + ".png"
+        picture_path = "api/files/recipepictures/" + base64.b64encode(picture_name.encode()).decode()
+        pictures.append(picture_path)
+        def encoded_upload(content, filename=picture_name, mime="image/png", **options):
+            return privileged.proxy("producthelper", "PUT",
+                "api/files/recipepictures/" + base64.b64encode(filename.encode()).decode(),
+                base64.b64encode(content).decode(), bodyEncoding="base64", contentType=mime,
+                headers={"Idempotency-Key": uuid.uuid4().hex}, **options)
+        check("html_picture_refused", encoded_upload(b"<!doctype html><script>alert(1)</script>")[0], 400)
+        check("svg_picture_refused", encoded_upload(b'<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>')[0], 400)
+        check("json_picture_validation_bypass_refused", privileged.proxy("producthelper", "PUT", picture_path,
+            "<!doctype html><script>alert(1)</script>", contentType="image/png",
+            headers={"Idempotency-Key": uuid.uuid4().hex})[0], 400)
+        check("invalid_picture_did_not_create_native_file", privileged.proxy("producthelper", "GET", picture_path, raw=True)[0], 404)
+        def chunk(kind, content):
+            return struct.pack(">I", len(content)) + kind + content + struct.pack(">I", zlib.crc32(kind + content) & 0xffffffff)
+        picture = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(b"\0\xff\0\0")) + chunk(b"IEND", b"")
+        upload_key = uuid.uuid4().hex
+        upload = {"addonId": "producthelper", "method": "PUT", "path": picture_path,
+                  "data": base64.b64encode(picture).decode(), "bodyEncoding": "base64",
+                  "contentType": "image/png", "raw": True}
+        uploaded = privileged.request("POST", "grocy/request", upload, headers={"Idempotency-Key": upload_key})
+        check("synthetic_png_uploaded_via_core", uploaded[0], 200)
+        repeated_picture = privileged.request("POST", "grocy/request", upload, headers={"Idempotency-Key": upload_key})
+        check("picture_upload_replay_is_same_result", repeated_picture[1] == uploaded[1], True)
+        downloaded = privileged.proxy("producthelper", "GET", picture_path, raw=True)
+        check("synthetic_png_read_via_core", downloaded[0], 200)
+        check("native_picture_bytes_identical", base64.b64decode(downloaded[1]["body"]) == picture, True)
+        deleted = privileged.proxy("producthelper", "DELETE", picture_path, headers={"Idempotency-Key": uuid.uuid4().hex})
+        check("synthetic_picture_deleted_via_core", deleted[0], 200)
+        check("synthetic_picture_absent_after_delete", privileged.proxy("producthelper", "GET", picture_path, raw=True)[0], 404)
         name = "grocyste-security-location-" + uuid.uuid4().hex
         payload = {"name": name, "description": "Disposable isolated qualification fixture"}
         operation_key = uuid.uuid4().hex
@@ -211,20 +246,26 @@ def main():
         check("core_logout_revokes_opaque_session", privileged.request("POST", "auth/logout", {})[0], 200)
         check("opaque_session_after_logout_denied", privileged.request("GET", "health")[0], 401)
     finally:
+        cleanup_statuses = []
+        for picture_path in pictures:
+            cleanup_statuses.append(api("DELETE", "/" + picture_path)[0])
         for location_id in locations:
-            api("DELETE", f"/api/objects/locations/{location_id}")
+            cleanup_statuses.append(api("DELETE", f"/api/objects/locations/{location_id}")[0])
         for user_id in owned:
-            api("DELETE", f"/api/users/{user_id}")
+            cleanup_statuses.append(api("DELETE", f"/api/users/{user_id}")[0])
         report = {"suite": "real-core-http-security", "createdAt": datetime.now(timezone.utc).isoformat(),
             "passed": sum(item["passed"] for item in evidence), "failed": sum(not item["passed"] for item in evidence),
             "tests": evidence, "productionRequests": 0, "credentialsInReport": False,
-            "destructiveScope": "temporary users and one owned location in disposable vanilla laboratory",
-            "cleanupAttempted": True, "limits": ["TLS verification disabled only for loopback self-signed laboratory certificate",
+            "destructiveScope": "temporary users, one owned location and one owned raster file in disposable vanilla laboratory",
+            "cleanupAttempted": True, "cleanupConfirmed": all(status in {200, 204, 404} for status in cleanup_statuses),
+            "limits": ["TLS verification disabled only for loopback self-signed laboratory certificate",
                 "No provider credentials or external paid inference exercised", "No manager package registry mutation in shared UI backend"]}
         output = LAB / "security/http-auth.json"
         output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
         print(json.dumps({"suite": report["suite"], "passed": report["passed"], "failed": report["failed"],
             "failedTests": [row["name"] for row in evidence if not row["passed"]]}))
+        if not report["cleanupConfirmed"]:
+            raise RuntimeError("Le nettoyage des seules fixtures possédées doit être vérifié.")
 
 
 if __name__ == "__main__":

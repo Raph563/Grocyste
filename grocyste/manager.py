@@ -400,6 +400,25 @@ class PackageManager:
         # install performs the signature, installed-byte and dependency checks.
         return self.install(identifier, previous, expected_generation=current["generation"])
 
+    def uninstall(self, identifier):
+        """Remove one active registration, retaining signed cache and history."""
+        validate_id(identifier)
+        with file_lock(self.lock):
+            old = self.current()
+            entry = old["addons"].get(identifier)
+            if entry is None:
+                raise ManagerError("unknown_target", "Addon inconnu", 404)
+            for name, dependant in old["addons"].items():
+                if (name != identifier and dependant.get("enabled")
+                        and identifier in dependant["manifest"].get("dependencies", {})):
+                    raise ManagerError("required_dependency", "Un addon actif utilise cette dépendance", 409)
+            new = load_json(canonical(old))
+            del new["addons"][identifier]
+            self._commit(old, new)
+            return {"status": "uninstalled", "generation": new["generation"],
+                    "addonId": identifier, "version": entry["version"],
+                    "cachedPackagesRetained": True}
+
 
 class ManagerHandler(BaseHTTPRequestHandler):
     server_version = "GrocysteManager/1.0"
@@ -409,7 +428,7 @@ class ManagerHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         try:
-            if self.path not in ("/v1/install", "/v1/disable", "/v1/rollback"):
+            if self.path not in ("/v1/install", "/v1/disable", "/v1/rollback", "/v1/uninstall"):
                 raise ManagerError("not_found", "Opération inconnue", 404)
             if self.headers.get("Content-Type") != "application/json" or self.headers.get("Transfer-Encoding"):
                 raise ManagerError("invalid_content_type", "JSON requis", 415)

@@ -14,10 +14,14 @@
       },
       "tested": true,
       "validation": {
-        "type": "automated-local",
-        "testsPassed": 36,
-        "normalGrocyQualification": "pending"
-      }
+        "type": "automated-and-real-isolated-grocy",
+        "testsPassed": 37,
+        "normalGrocyQualification": "verified-scoped",
+        "testedGrocy": "4.7.1",
+        "productionBusinessDemo": false
+      },
+      "function": "Recettes et courses : prix absents et sous-total partiel explicites",
+      "limits": "Aucun prix inventé, conversions non prouvées inconnues"
     },
     {
       "id": "equivalents",
@@ -32,10 +36,14 @@
       },
       "tested": true,
       "validation": {
-        "type": "automated-local",
-        "testsPassed": 11,
-        "normalGrocyQualification": "pending"
-      }
+        "type": "automated-and-real-isolated-grocy",
+        "testsPassed": 12,
+        "normalGrocyQualification": "verified-scoped",
+        "testedGrocy": "4.7.1",
+        "productionBusinessDemo": false
+      },
+      "function": "Courses : familles absentes et fourchette incomplète explicites",
+      "limits": "Familles et références doivent exister et avoir une génération valide ; aucun enrichissement privé effectué"
     },
     {
       "id": "producthelper",
@@ -51,10 +59,14 @@
       },
       "tested": true,
       "validation": {
-        "type": "automated-local",
+        "type": "automated-and-real-isolated-grocy",
         "testsPassed": 3,
-        "normalGrocyQualification": "pending"
-      }
+        "normalGrocyQualification": "verified-scoped",
+        "testedGrocy": "4.7.1",
+        "productionBusinessDemo": false
+      },
+      "function": "Formulaire natif de produit avec aides conservées",
+      "limits": "Correctif SQL historique conservé sur clone ; jamais ajouté à une instance neuve"
     },
     {
       "id": "receipt-scanner",
@@ -69,10 +81,14 @@
       },
       "tested": true,
       "validation": {
-        "type": "automated-local",
+        "type": "automated-and-real-isolated-grocy",
         "testsPassed": 3,
-        "normalGrocyQualification": "pending"
-      }
+        "normalGrocyQualification": "verified-scoped",
+        "testedGrocy": "4.7.1",
+        "productionBusinessDemo": false
+      },
+      "function": "Carte achat, OCR local et worker PDF local",
+      "limits": "OCR/PDF locaux vérifiés ; appels IA facturés et catalogue historique non qualifiés"
     },
     {
       "id": "recipe-live",
@@ -88,10 +104,14 @@
       },
       "tested": true,
       "validation": {
-        "type": "automated-local",
+        "type": "automated-and-real-isolated-grocy",
         "testsPassed": 27,
-        "normalGrocyQualification": "pending"
-      }
+        "normalGrocyQualification": "verified-scoped",
+        "testedGrocy": "4.7.1",
+        "productionBusinessDemo": false
+      },
+      "function": "Lecture des étapes, portions et suivi live",
+      "limits": "Variantes de méthode couvertes par les tests de modèle ; client Android réel non exercé"
     },
     {
       "id": "recipe-scaling",
@@ -104,10 +124,14 @@
       "dependencies": {},
       "tested": true,
       "validation": {
-        "type": "automated-local",
-        "testsPassed": 11,
-        "normalGrocyQualification": "pending"
-      }
+        "type": "automated-and-real-isolated-grocy",
+        "testsPassed": 12,
+        "normalGrocyQualification": "verified-scoped",
+        "testedGrocy": "4.7.1",
+        "productionBusinessDemo": false
+      },
+      "function": "Quantités et annotations, coûts inconnus qualifiés",
+      "limits": "Quantités pratiques seulement si la conversion est prouvée"
     },
     {
       "id": "safe-import",
@@ -120,10 +144,14 @@
       "dependencies": {},
       "tested": true,
       "validation": {
-        "type": "automated-local",
+        "type": "automated-and-real-isolated-grocy",
         "testsPassed": 55,
-        "normalGrocyQualification": "pending"
-      }
+        "normalGrocyQualification": "verified-scoped",
+        "testedGrocy": "4.7.1",
+        "productionBusinessDemo": false
+      },
+      "function": "Proposition UI, application synthétique, relecture, rejeu et rollback",
+      "limits": "Huit échecs catalogue historiques exclus ; aucun import métier de démonstration en production"
     },
     {
       "id": "shared-timers",
@@ -136,10 +164,14 @@
       "dependencies": {},
       "tested": true,
       "validation": {
-        "type": "automated-local",
+        "type": "automated-and-real-isolated-grocy",
         "testsPassed": 12,
-        "normalGrocyQualification": "pending"
-      }
+        "normalGrocyQualification": "verified-scoped",
+        "testedGrocy": "4.7.1",
+        "productionBusinessDemo": false
+      },
+      "function": "Minuteur canonique Grocy, échanges navigateur/API native, rejeu",
+      "limits": "Contrat API exercé ; application Android réelle non testée"
     },
     {
       "id": "statnerd",
@@ -152,10 +184,14 @@
       "dependencies": {},
       "tested": true,
       "validation": {
-        "type": "automated-local",
+        "type": "automated-and-real-isolated-grocy",
         "testsPassed": 3,
-        "normalGrocyQualification": "pending"
-      }
+        "normalGrocyQualification": "verified-scoped",
+        "testedGrocy": "4.7.1",
+        "productionBusinessDemo": false
+      },
+      "function": "Tableau de bord et graphique local",
+      "limits": "Graphique vérifié sur données synthétiques"
     }
   ]
 }

@@ -14,6 +14,8 @@ function fixture({ refuse = false, refuseVault = false } = {}) {
     if (url.endsWith('/auth/session')) return Response.json({ ok: true, csrfToken: 'csrf-fixture', user: { id: 4 }, capabilities: [], addons: [],instanceConfig:{sharedTimerEntityId:37},settings:{uiLanguage:'fr'} });
     if (url.endsWith('/grocy/request')) return options.body.includes('"raw":true') ? Response.json({ ok: true, status: 200, body: 'eyJpZCI6MX0=', bodyEncoding: 'base64', contentType: 'application/json' }) : Response.json({ ok: true, status: 200, data: [{ id: 1 }] });
     if (url.includes('/storage/')) return Response.json({ ok: true, data: {}, revision: 2 });
+    if (url.includes('/events?')) return Response.json({ok:true,events:[{id:12,namespace:'budgets',kind:'storage.changed',data:{key:'prices',revision:3}}]});
+    if (url.endsWith('/jobs')) return Response.json({ok:true,jobs:[{key:'synthetic-lost-write',state:'needs-reconciliation',status:null}]});
     if(refuseVault&&JSON.parse(options.body||'{}').operation==='credential.store')return Response.json({ok:false,error:'Coffre refusé'},{status:403});
     return Response.json({ ok: true, status: 200, body: '{"ok":true}', contentType: 'application/json' });
   };
@@ -74,4 +76,10 @@ test('une clé fournisseur ne quitte le navigateur que vers le coffre confirmé'
   const vault = calls.find(call => call.parsed?.operation === 'credential.store'); assert.equal(vault.parsed.params.secret, 'provider-secret-fixture');
   const response = await sdk.compatFetch('producthelper')('https://api.openai.com/v1/chat/completions', { method: 'POST', headers: { Authorization: 'Bearer grocyste-credential:openai' }, body: '{}' });
   assert.equal(response.status, 200); assert.equal(calls.at(-1).parsed.params.headers.Authorization, undefined);
+});
+test('événements scoped et tâches incertaines sont consultables sans répéter une mutation', async () => {
+  const {sdk,calls}=fixture();await sdk.initialize();
+  const events=await sdk.scope('budgets').events(11);assert.equal(events[0].id,12);assert.match(calls.at(-1).url,/addonId=budgets&after=11$/);
+  assert.equal((await sdk.tasks())[0].state,'needs-reconciliation');assert.equal(calls.at(-1).method,'GET');
+  assert.equal(sdk.settings().uiLanguage,'fr');await assert.rejects(()=>sdk.scope('budgets').events(-1));
 });

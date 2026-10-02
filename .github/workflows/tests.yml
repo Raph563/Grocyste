@@ -21,14 +21,18 @@ jobs:
           python-version: '3.12'
           cache: pip
           cache-dependency-path: |
-            requirements.txt
-            requirements-dev.txt
+            requirements-bootstrap.lock.txt
+            requirements.lock.txt
+            requirements-dev.lock.txt
       - name: Installer Node.js 24
         uses: actions/setup-node@v4
         with:
           node-version: '24'
       - name: Installer les dépendances de test
-        run: python -m pip install -r requirements-dev.txt
+        run: |
+          python -m pip install --require-hashes --only-binary=:all: --no-deps -r requirements-bootstrap.lock.txt
+          python -m pip install --require-hashes --only-binary=:all: -r requirements.lock.txt
+          python -m pip install --require-hashes --only-binary=:all: -r requirements-dev.lock.txt
       - name: Vérifier le serveur et ses outils
         run: python -m pytest
       - name: Vérifier le SDK JavaScript

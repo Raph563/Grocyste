@@ -1,5 +1,6 @@
 """SPDX-License-Identifier: GPL-3.0-or-later"""
 import hashlib
+import json
 from pathlib import Path
 import sqlite3
 import pytest
@@ -120,3 +121,41 @@ def test_rollback_refuses_overwrite_of_user_customization(tmp_path):
     with pytest.raises(ManagerError):
         rollback(receipt)
     assert (data / "custom_js.html").read_bytes() == b"new customization"
+
+
+@pytest.mark.parametrize("after_publication", [False, True])
+def test_interrupted_activation_reconciles_observed_state(tmp_path, monkeypatch, after_publication):
+    from grocyste import migration
+    data = data_directory(tmp_path)
+    before = fingerprints(data / "grocy.db")
+    result = prepare(data, tmp_path / "receipts", "/__grocyste")
+    receipt = Path(result["receipt"])
+    real_publish = migration.publish_target
+    def interrupted(target, content, metadata):
+        if after_publication:
+            real_publish(target, content, metadata)
+        raise RuntimeError("synthetic process interruption")
+    monkeypatch.setattr(migration, "publish_target", interrupted)
+    with pytest.raises(RuntimeError):
+        activate(receipt)
+    assert json.loads((receipt / "receipt.json").read_bytes())["status"] == "activating"
+    monkeypatch.setattr(migration, "publish_target", real_publish)
+    assert activate(receipt)["status"] == ("reconciled" if after_publication else "active")
+    assert activate(receipt)["status"] == "noop"
+    assert fingerprints(data / "grocy.db") == before
+
+
+def test_interrupted_activation_never_reconciles_foreign_business_change(tmp_path, monkeypatch):
+    from grocyste import migration
+    data = data_directory(tmp_path)
+    result = prepare(data, tmp_path / "receipts", "/__grocyste")
+    receipt = Path(result["receipt"])
+    monkeypatch.setattr(migration, "publish_target", lambda *_: (_ for _ in ()).throw(RuntimeError("interruption")))
+    with pytest.raises(RuntimeError):
+        activate(receipt)
+    original = (data / "custom_js.html").read_bytes()
+    with sqlite3.connect(data / "grocy.db") as connection:
+        connection.execute("UPDATE stock SET amount=17")
+    with pytest.raises(ManagerError) as error:
+        activate(receipt)
+    assert error.value.code == "reconciliation_required" and (data / "custom_js.html").read_bytes() == original
