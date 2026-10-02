@@ -1,0 +1,11 @@
+[project]
+name = "grocyste"
+version = "1.0.0"
+description = "Grocyste – Seasonings enabler, CORE administré pour les addons Grocy"
+requires-python = ">=3.12"
+license = "GPL-3.0-or-later"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra"

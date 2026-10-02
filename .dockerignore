@@ -1,0 +1,14 @@
+.git
+__pycache__
+*.pyc
+.pytest_cache
+.venv
+private
+state
+*.db
+*.pem
+*.key
+.env
+.env.*
+dist/packages
+node_modules

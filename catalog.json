@@ -1,0 +1,161 @@
+{
+  "schema": 1,
+  "addons": [
+    {
+      "id": "budgets",
+      "name": "Grocyste — Budgets et références",
+      "repository": "Raph563/Grocyste-Budgets",
+      "version": "1.0.0",
+      "grocy": [
+        "4.7.1"
+      ],
+      "dependencies": {
+        "recipe-scaling": ">=1.0.0 <2.0.0"
+      },
+      "tested": true,
+      "validation": {
+        "type": "automated-local",
+        "testsPassed": 36,
+        "normalGrocyQualification": "pending"
+      }
+    },
+    {
+      "id": "equivalents",
+      "name": "Grocyste — Équivalents et fourchettes",
+      "repository": "Raph563/Grocyste-Equivalents",
+      "version": "1.0.0",
+      "grocy": [
+        "4.7.1"
+      ],
+      "dependencies": {
+        "budgets": ">=1.0.0 <2.0.0"
+      },
+      "tested": true,
+      "validation": {
+        "type": "automated-local",
+        "testsPassed": 11,
+        "normalGrocyQualification": "pending"
+      }
+    },
+    {
+      "id": "producthelper",
+      "name": "ProductHelper",
+      "repository": "Raph563/ProductHelper",
+      "version": "4.0.43",
+      "grocy": [
+        "4.7.1"
+      ],
+      "dependencies": {
+        "statnerd": ">=4.4.2 <5.0.0",
+        "receipt-scanner": ">=1.0.4 <2.0.0"
+      },
+      "tested": true,
+      "validation": {
+        "type": "automated-local",
+        "testsPassed": 3,
+        "normalGrocyQualification": "pending"
+      }
+    },
+    {
+      "id": "receipt-scanner",
+      "name": "ReceiptScanner",
+      "repository": "Raph563/ReceiptScanner",
+      "version": "1.0.4",
+      "grocy": [
+        "4.7.1"
+      ],
+      "dependencies": {
+        "statnerd": ">=4.4.2 <5.0.0"
+      },
+      "tested": true,
+      "validation": {
+        "type": "automated-local",
+        "testsPassed": 3,
+        "normalGrocyQualification": "pending"
+      }
+    },
+    {
+      "id": "recipe-live",
+      "name": "Grocyste — Recette live",
+      "repository": "Raph563/Grocyste-RecipeLive",
+      "version": "1.0.0",
+      "grocy": [
+        "4.7.1"
+      ],
+      "dependencies": {
+        "recipe-scaling": ">=1.0.0 <2.0.0",
+        "shared-timers": ">=1.0.0 <2.0.0"
+      },
+      "tested": true,
+      "validation": {
+        "type": "automated-local",
+        "testsPassed": 27,
+        "normalGrocyQualification": "pending"
+      }
+    },
+    {
+      "id": "recipe-scaling",
+      "name": "Grocyste — Quantités et proportions",
+      "repository": "Raph563/Grocyste-RecipeScaling",
+      "version": "1.0.0",
+      "grocy": [
+        "4.7.1"
+      ],
+      "dependencies": {},
+      "tested": true,
+      "validation": {
+        "type": "automated-local",
+        "testsPassed": 11,
+        "normalGrocyQualification": "pending"
+      }
+    },
+    {
+      "id": "safe-import",
+      "name": "Grocyste — Import sûr",
+      "repository": "Raph563/Grocyste-SafeImport",
+      "version": "1.0.0",
+      "grocy": [
+        "4.7.1"
+      ],
+      "dependencies": {},
+      "tested": true,
+      "validation": {
+        "type": "automated-local",
+        "testsPassed": 55,
+        "normalGrocyQualification": "pending"
+      }
+    },
+    {
+      "id": "shared-timers",
+      "name": "Grocyste — Minuteurs et suivi partagés",
+      "repository": "Raph563/Grocyste-SharedTimers",
+      "version": "1.0.0",
+      "grocy": [
+        "4.7.1"
+      ],
+      "dependencies": {},
+      "tested": true,
+      "validation": {
+        "type": "automated-local",
+        "testsPassed": 12,
+        "normalGrocyQualification": "pending"
+      }
+    },
+    {
+      "id": "statnerd",
+      "name": "StatNerd",
+      "repository": "Raph563/StatNerd",
+      "version": "4.4.2",
+      "grocy": [
+        "4.7.1"
+      ],
+      "dependencies": {},
+      "tested": true,
+      "validation": {
+        "type": "automated-local",
+        "testsPassed": 3,
+        "normalGrocyQualification": "pending"
+      }
+    }
+  ]
+}

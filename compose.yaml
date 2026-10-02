@@ -1,0 +1,89 @@
+services:
+  grocyste-core:
+    image: local/grocyste:1.0.0
+    build:
+      context: .
+      target: runtime
+    user: "1000:1000"
+    init: true
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 128
+    mem_limit: 512m
+    ports: ["127.0.0.1:8788:8788"]
+    environment:
+      GROCY_URL: "${GROCY_URL:?URL interne Grocy requise}"
+      PUBLIC_ORIGIN: "${PUBLIC_ORIGIN:?Origine HTTPS requise}"
+      BASE_PATH: "${GROCYSTE_BASE_PATH:-/__grocyste}"
+      STATE_DIR: /state
+      PACKAGES_DIR: /packages
+      SECRET_FILE: /state/secrets/grocy.json
+      INSTANCE_CONFIG_FILE: /state/config/instance.json
+      CATALOG_FILE: /app/catalog.json
+      MANAGER_SOCKET: /run/grocyste/manager.sock
+      WEB_DIR: /app/web
+      LEGACY_IMPORT_DIR: /state/legacy
+      LIVE_URL: "${LIVE_URL:-http://grocyste-live:8093/__mon_grocy/live/v1}"
+    volumes:
+      - "${GROCYSTE_HOME:-/opt/grocyste}/state:/state"
+      - "${GROCYSTE_HOME:-/opt/grocyste}/packages:/packages:ro"
+      - "${GROCYSTE_HOME:-/opt/grocyste}/run:/run/grocyste"
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=64m"]
+    networks: [grocy]
+    depends_on: [grocyste-manager]
+  grocyste-manager:
+    image: local/grocyste:1.0.0
+    build:
+      context: .
+      target: runtime
+    user: "1000:1000"
+    init: true
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 64
+    mem_limit: 512m
+    command: ["python", "-m", "grocyste.manager"]
+    environment:
+      PACKAGES_DIR: /packages
+      CATALOG_PUBLIC_KEY: /app/trust/catalog.pub
+      SIGNED_CATALOG: /packages/catalog.signed.json
+      MANAGER_SOCKET: /run/grocyste/manager.sock
+      GROCY_VERSION: "4.7.1"
+    volumes:
+      - "${GROCYSTE_HOME:-/opt/grocyste}/packages:/packages"
+      - "${GROCYSTE_HOME:-/opt/grocyste}/run:/run/grocyste"
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=64m"]
+    networks: [packages]
+  grocyste-live:
+    image: local/grocyste:1.0.0
+    user: "1000:1000"
+    init: true
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 64
+    mem_limit: 256m
+    command: ["python", "-m", "grocyste.live_owner"]
+    environment:
+      GROCY_URL: "${GROCY_URL}"
+      PUBLIC_ORIGIN: "${PUBLIC_ORIGIN}"
+      PORT: "8093"
+      PACKAGES_DIR: /packages
+      LIVE_STATE_DIRECTORY: /state
+      INSTANCE_CONFIG_FILE: /instance/instance.json
+    volumes:
+      - "${GROCYSTE_HOME:-/opt/grocyste}/packages:/packages:ro"
+      - "${GROCYSTE_HOME:-/opt/grocyste}/state/live:/state"
+      - "${GROCYSTE_HOME:-/opt/grocyste}/state/config:/instance:ro"
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=32m"]
+    networks: [grocy]
+networks:
+  grocy:
+    external: true
+    name: "${GROCY_DOCKER_NETWORK:-grocy_default}"
+  packages: {}
