@@ -5,4 +5,4 @@
 - [x] Installation/rejeu, désactivation, désinstallation, réinstallation et rollback réellement testés sur fixtures isolées.
 - [x] Migration du clone conserve les personnalisations et empreintes métier ; restauration réelle des sauvegardes.
 - [x] Bascule réelle contrôlée, secret historique sans vérificateur actif et route legacy fermée.
-- [ ] Commits/releases publics, paquets signés et téléchargement public vérifié.
+- [x] Commits/releases publics, paquets signés et téléchargement public vérifié.

@@ -28,13 +28,13 @@ Depuis une copie vérifiée de la release sur l’hôte Linux de Grocy, pour l�
 sudo ./scripts/install.sh --origin https://grocy.example.org --caddyfile /opt/grocy/Caddyfile
 ```
 
-Adaptez l’origine et le chemin Caddy. L’outil détecte le dossier de données du conteneur `grocy`, prépare ses sauvegardes, vérifie les paquets de la release et configure les services. Pour reprendre le service live historique reconnu, ajoutez `--legacy-live-container mon-grocy-live` afin de préserver ses sessions avant la bascule. Les prérequis, autres paramètres et procédures de reprise sont décrits dans le [guide d’installation](docs/installation.md). La publication des dépôts et des paquets doit précéder une installation publique depuis GitHub.
+Adaptez l’origine et le chemin Caddy. L’outil détecte le dossier de données du conteneur `grocy`, prépare ses sauvegardes, vérifie les paquets de la release et configure les services. Pour reprendre le service live historique reconnu, ajoutez `--legacy-live-container mon-grocy-live` afin de préserver ses sessions avant la bascule. Les prérequis, autres paramètres et procédures de reprise sont décrits dans le [guide d’installation](docs/installation.md). Les [assets de la release 1.0.0](https://github.com/Raph563/Grocyste/releases/tag/v1.0.0) sont publics et leur téléchargement a été vérifié.
 
 Après installation, connectez-vous à Grocy et ouvrez **Réglages → Grocyste — Assaisonnements**, ou la page `/stocksettings?grocyste=1` de votre instance. Avec un compte administrateur, utilisez **Relier cette instance Grocy** si le service n’est pas encore appairé. La gestion des paquets est réservée aux administrateurs ; les autres utilisateurs utilisent les addons autorisés avec leurs propres droits Grocy.
 
 ## Catalogue des neuf assaisonnements
 
-Chaque ligne correspond à un dépôt indépendant et à une version signée qualifiée sur Grocy 4.7.1. Les liens de release sont vérifiés lors de la publication.
+Chaque ligne correspond à un dépôt indépendant et à une version signée qualifiée sur Grocy 4.7.1. Les fichiers de release ont été téléchargés et vérifiés après publication.
 
 | Assaisonnement | Version testée | Usage | Dépendances d’addons |
 | --- | --- | --- | --- |
@@ -50,7 +50,7 @@ Chaque ligne correspond à un dépôt indépendant et à une version signée qua
 
 Tous déclarent Grocy `4.7.1` et un CORE `>=1.0.0 <2.0.0`. Les dépendances Grocyste suivent `>=1.0.0 <2.0.0` ; les adaptateurs historiques demandent StatNerd `>=4.4.2 <5.0.0` et ReceiptScanner `>=1.0.4 <2.0.0`. Les parcours effectivement exercés comprennent les proportions et le suivi live, les prix inconnus qualifiés, les fourchettes absentes, les minuteurs natifs, les trois interfaces historiques, l’OCR/PDF locaux et l’application/relecture/retour d’un import synthétique. Cela ne qualifie pas les appels IA facturés ni une véritable application Android. Les huit échecs historiques du catalogue restent exclus.
 
-Les neuf archives signées et leurs métadonnées sont préparées localement. Le [catalogue descriptif](catalog.json) distingue les résultats automatisés locaux de la qualification sur une instance Grocy normale et les limites de chaque addon. Le [catalogue de distribution signé](catalog.signed.json) associe chaque version à une URL de release et à son empreinte ; ces destinations deviennent utilisables après publication des assets. La clé de confiance publique est fournie dans [`trust/catalog.pub`](trust/catalog.pub).
+Les neuf archives signées et leurs métadonnées sont publiées dans leurs releases. Le [catalogue descriptif](catalog.json) distingue les résultats automatisés locaux de la qualification sur une instance Grocy normale et les limites de chaque addon. Le [catalogue de distribution signé](catalog.signed.json) associe chaque version à une URL de release et à son empreinte ; ces destinations ont été vérifiées depuis un cache vide. La clé de confiance publique est fournie dans [`trust/catalog.pub`](trust/catalog.pub).
 
 Les trois dépôts historiques conservent leur branche par défaut. Les adaptations Grocyste sont identifiées par les tags [StatNerd v4.4.2](https://github.com/Raph563/StatNerd/tree/v4.4.2), [ProductHelper v4.0.43](https://github.com/Raph563/ProductHelper/tree/v4.0.43) et [ReceiptScanner v1.0.4](https://github.com/Raph563/ReceiptScanner/tree/v1.0.4) ; leurs guides actuels sont ceux de ces versions. Les anciens guides restent archivés comme documentation historique.
 
