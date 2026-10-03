@@ -58,6 +58,12 @@ La capture suivante montre une recette synthétique : le budget demeure explicit
 
 ![Recette live et budget sur des données synthétiques](docs/images/grocyste-recipe-synthetic.png)
 
+## Catalogue public — dixième addon
+
+**[Grocyste-Catalog](https://github.com/Raph563/Grocyste-Catalog)** est livré séparément en version 1.0.0 : **[catalogue public sans compte](https://raph563.github.io/Grocyste-Catalog/)**, 5 098 fiches recettes (dont 5 011 avec ingrédients et préparation libre), 690 produits et 85 observations de prix publics datées. Recherche, filtres, liens directs et téléchargement JSON sont vérifiés sur Grocy 4.7.1 ; le nouvel addon ne demande aucune capacité métier.
+
+Les stocks, achats, comptes et photos privées restent hors de cette collection. Les prix anciens doivent être revalidés ; les méthodes tierces sans droit de republication restent à consulter à leur source. L’addon s’installe avec le CORE 1.0.0 existant sans changer les neuf archives bootstrap. Voir [la livraison du catalogue](docs/catalogue-public-1.0.0.md) pour l’installation, les licences et les limites.
+
 ## Architecture
 
 ```mermaid
